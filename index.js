@@ -45,14 +45,22 @@ const client = new Client({
 client.once("ready", async () => {
   console.log(`🤖 Bot đã sẵn sàng: ${client.user.tag}`);
 
-  // Đăng ký slash commands
   const commands = [
     new SlashCommandBuilder()
       .setName("ping")
       .setDescription("Kiểm tra độ trễ phản hồi của bot"),
     new SlashCommandBuilder()
       .setName("status")
-      .setDescription("Hiển thị trạng thái hoạt động của bot")
+      .setDescription("Hiển thị trạng thái hoạt động của bot"),
+    new SlashCommandBuilder()
+      .setName("info")
+      .setDescription("Giới thiệu về Hyggshi OS Bot"),
+    new SlashCommandBuilder()
+      .setName("help")
+      .setDescription("Danh sách các lệnh có sẵn"),
+    new SlashCommandBuilder()
+      .setName("server")
+      .setDescription("Hiển thị thông tin máy chủ")
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
@@ -69,16 +77,19 @@ client.once("ready", async () => {
   }
 });
 
+
 // Slash command handler
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  if (interaction.commandName === "ping") {
+  const { commandName } = interaction;
+
+  if (commandName === "ping") {
     const ping = Date.now() - interaction.createdTimestamp;
     await interaction.reply(`🏓 Ping: ${ping} ms`);
   }
 
-  if (interaction.commandName === "status") {
+  if (commandName === "status") {
     const uptimeSeconds = process.uptime();
     const minutes = Math.floor(uptimeSeconds / 60);
     const seconds = Math.floor(uptimeSeconds % 60);
@@ -88,7 +99,35 @@ client.on("interactionCreate", async interaction => {
       `**Uptime:** ${minutes} phút ${seconds} giây`
     );
   }
+
+  if (commandName === "info") {
+    await interaction.reply(
+      `🤖 **Hyggshi OS Bot** là trợ lý Discord giúp quản lý máy chủ, gửi phản hồi tự động và hỗ trợ slash commands.\n` +
+      `Được phát triển với ❤️ bởi bạn.`
+    );
+  }
+
+  if (commandName === "help") {
+    await interaction.reply(
+      `📋 **Các lệnh có sẵn:**\n` +
+      `• /ping – Kiểm tra độ trễ\n` +
+      `• /status – Xem trạng thái bot\n` +
+      `• /info – Giới thiệu bot\n` +
+      `• /help – Danh sách lệnh\n` +
+      `• /server – Thông tin máy chủ`
+    );
+  }
+
+  if (commandName === "server") {
+    const { guild } = interaction;
+    await interaction.reply(
+      `🏠 **Máy chủ:** ${guild.name}\n` +
+      `👥 **Thành viên:** ${guild.memberCount}\n` +
+      `📆 **Tạo ngày:** <t:${Math.floor(guild.createdTimestamp / 1000)}:R>`
+    );
+  }
 });
+
 
 // Chat auto-reply
 client.on("messageCreate", (message) => {
