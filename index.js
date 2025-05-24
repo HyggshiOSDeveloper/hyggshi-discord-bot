@@ -45,10 +45,6 @@ const client = new Client({
 client.once("ready", async () => {
   console.log(`🤖 Bot đã sẵn sàng: ${client.user.tag}`);
 
-// =====================================================================================
-//                                command creation section                                
-// =====================================================================================
-  
   const commands = [
     new SlashCommandBuilder().setName("ping").setDescription("Kiểm tra độ trễ phản hồi của bot"),
     new SlashCommandBuilder().setName("status").setDescription("Hiển thị trạng thái hoạt động của bot"),
@@ -59,7 +55,14 @@ client.once("ready", async () => {
     new SlashCommandBuilder().setName("members").setDescription("Xem số thành viên trong server"),
     new SlashCommandBuilder().setName("botinfo").setDescription("Thông tin bot: phiên bản, dev, uptime"),
     new SlashCommandBuilder().setName("github").setDescription("Link GitHub của dự án"),
-    new SlashCommandBuilder().setName("say").setDescription("Câu bạn muốn bot lặp lại"),
+    new SlashCommandBuilder()
+      .setName("say")
+      .setDescription("Bot lặp lại câu bạn nhập")
+      .addStringOption(option =>
+        option.setName("message")
+          .setDescription("Câu bạn muốn bot lặp lại")
+          .setRequired(true)
+      ),
     new SlashCommandBuilder().setName("roll").setDescription("Tung xúc xắc 1-100 và nhận kết quả ngẫu nhiên"),
     new SlashCommandBuilder()
       .setName("avatar")
@@ -77,15 +80,6 @@ client.once("ready", async () => {
           .setDescription("Người bạn muốn ôm")
           .setRequired(false)
       ),
-    new SlashCommandBuilder()
-  .setName("say")
-  .setDescription("Bot lặp lại câu bạn nhập")
-  .addStringOption(option =>
-    option.setName("message")
-      .setDescription("Câu bạn muốn bot lặp lại")
-      .setRequired(true)
-  ),
-
     new SlashCommandBuilder().setName("uptime").setDescription("Xem thời gian bot đã hoạt động")
   ].map(cmd => cmd.toJSON());
 
@@ -143,11 +137,11 @@ client.on("interactionCreate", async interaction => {
       `• /avatar – Avatar người dùng\n` +
       `• /hug – Ôm ai đó\n` +
       `• /server – Thông tin máy chủ\n` +
-      `• /members – Thông tin máy chủ\n` +
-      `• /botinfo – Thông tin máy chủ\n` +
-      `• /github – Thông tin máy chủ\n` +
-      `• /suy – Câu bạn muốn bot lặp lại\n` +
-      `• /roll – Tung xúc xắc 1-100 và nhận kết quả ngẫu nhiên\n` +
+      `• /members – Số thành viên\n` +
+      `• /botinfo – Thông tin bot\n` +
+      `• /github – Link GitHub\n` +
+      `• /say – Bot lặp lại câu bạn nhập\n` +
+      `• /roll – Tung xúc xắc 1-100\n` +
       `• /uptime – Thời gian bot chạy`
     );
   }
@@ -168,6 +162,49 @@ client.on("interactionCreate", async interaction => {
       `• Tên: ${user.username}#${user.discriminator}\n` +
       `• ID: ${user.id}\n` +
       `• Tạo tài khoản: <t:${Math.floor(user.createdTimestamp / 1000)}:R>`
+    );
+  }
+
+  if (commandName === "members") {
+    const memberCount = interaction.guild.memberCount;
+    await interaction.reply(`👥 Thành viên: ${memberCount}`);
+  }
+
+  if (commandName === "botinfo") {
+    const uptime = process.uptime();
+    const hours = Math.floor(uptime / 3600);
+    const minutes = Math.floor((uptime % 3600) / 60);
+    const seconds = Math.floor(uptime % 60);
+    await interaction.reply(
+      `🤖 **Hyggshi OS Bot**\n` +
+      `• Phiên bản: 1.2.9 beta 12\n` +
+      `• Dev: Nguyễn Minh Phúc\n` +
+      `• Uptime: ${hours} giờ ${minutes} phút ${seconds} giây`
+    );
+  }
+
+  if (commandName === "github") {
+    await interaction.reply("🔗 **GitHub:** https://github.com/HyggshiOSDeveloper/Hyggshi-OS-project-center");
+  }
+
+  if (commandName === "say") {
+    const message = interaction.options.getString("message");
+    await interaction.reply(message);
+  }
+
+  if (commandName === "roll") {
+    const result = Math.floor(Math.random() * 100) + 1;
+    await interaction.reply(`🎲 Bạn tung được: ${result}`);
+  }
+
+  if (commandName === "uptime") {
+    const uptime = process.uptime();
+    const hours = Math.floor(uptime / 3600);
+    const minutes = Math.floor((uptime % 3600) / 60);
+    const seconds = Math.floor(uptime % 60);
+
+    await interaction.reply(
+      `🕒 **Uptime:** ${hours} giờ ${minutes} phút ${seconds} giây`
     );
   }
 
@@ -192,50 +229,6 @@ client.on("interactionCreate", async interaction => {
       await interaction.reply(`🤗 ${interaction.user} đã ôm ${target}!`);
     }
   }
-
-if (commandName === "members") {
-  const memberCount = interaction.guild.memberCount;
-  await interaction.reply(`👥 Thành viên: ${memberCount}`);
-}
-
-if (commandName === "botinfo") {
-  const uptime = process.uptime();
-  const hours = Math.floor(uptime / 3600);
-  const minutes = Math.floor((uptime % 3600) / 60);
-  const seconds = Math.floor(uptime % 60);
-  await interaction.reply(
-    `🤖 **Hyggshi OS Bot**\n` +
-    `• Phiên bản: 1.2.9 beta 12\n` +
-    `• Dev: Nguyễn Minh Phúc\n` +
-    `• Uptime: ${hours} giờ ${minutes} phút ${seconds} giây`
-  );
-}
-
-if (commandName === "github") {
-  await interaction.reply("🔗 **GitHub:** https://github.com/HyggshiOSDeveloper/Hyggshi-OS-project-center");
-}
-  
-  if (commandName === "say") {
-  const message = interaction.options.getString("message");
-  await interaction.reply(message);
-}
-
-  if (commandName === "roll") {
-  const result = Math.floor(Math.random() * 100) + 1;
-  await interaction.reply(`🎲 Bạn tung được: ${result}`);
-}
-
-  
-  if (commandName === "uptime") {
-    const uptime = process.uptime();
-    const hours = Math.floor(uptime / 3600);
-    const minutes = Math.floor((uptime % 3600) / 60);
-    const seconds = Math.floor(uptime % 60);
-
-    await interaction.reply(
-      `🕒 **Uptime:** ${hours} giờ ${minutes} phút ${seconds} giây`
-    );
-  }
 });
 
 // Chat auto-reply
@@ -258,3 +251,4 @@ client.on("guildMemberAdd", (member) => {
 
 // Start bot
 client.login(process.env.TOKEN);
+
