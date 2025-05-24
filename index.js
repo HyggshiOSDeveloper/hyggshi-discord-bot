@@ -45,7 +45,7 @@ const client = new Client({
 client.once("ready", async () => {
   console.log(`🤖 Bot đã sẵn sàng: ${client.user.tag}`);
 
- const commands = [
+const commands = [
   new SlashCommandBuilder().setName("ping").setDescription("Kiểm tra độ trễ phản hồi của bot"),
   new SlashCommandBuilder().setName("status").setDescription("Hiển thị trạng thái hoạt động của bot"),
   new SlashCommandBuilder().setName("info").setDescription("Giới thiệu về Hyggshi OS Bot"),
@@ -59,8 +59,12 @@ client.once("ready", async () => {
       option.setName("target")
         .setDescription("Chọn người dùng")
         .setRequired(false)
-    )
+    ),
+  new SlashCommandBuilder()
+    .setName("uptime")
+    .setDescription("Xem thời gian bot đã hoạt động")
 ].map(cmd => cmd.toJSON());
+
 
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
@@ -152,6 +156,17 @@ client.on("interactionCreate", async interaction => {
     );
   }
 });
+
+if (commandName === "uptime") {
+  const uptime = process.uptime();
+  const hours = Math.floor(uptime / 3600);
+  const minutes = Math.floor((uptime % 3600) / 60);
+  const seconds = Math.floor(uptime % 60);
+
+  await interaction.reply(
+    `🕒 **Uptime:** ${hours} giờ ${minutes} phút ${seconds} giây`
+  );
+}
 
 
 // Chat auto-reply
