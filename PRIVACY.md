@@ -29,8 +29,8 @@ You may contact the developer if you have any questions or concerns about the Bo
 ## 5️⃣ Contact Information
 
 Developer: Nguyễn Minh Phúc  
-Discord: [Your Discord Username or ID]  
-GitHub: https://github.com/HyggshiOS
+Discord: Hyggshi 
+GitHub: [HyggshiOS](https://github.com/HyggshiOSDeveloper/Hyggshi-OS-project-center)
 
 ---
 
