@@ -126,25 +126,25 @@ client.on("interactionCreate", async interaction => {
     );
   }
 
-  if (commandName === "help") {
-    await interaction.reply(
-      `📋 **Các lệnh có sẵn:**\n` +
-      `• /ping – Kiểm tra độ trễ\n` +
-      `• /status – Trạng thái bot\n` +
-      `• /info – Giới thiệu bot\n` +
-      `• /help – Danh sách lệnh\n` +
-      `• /user – Thông tin người dùng\n` +
-      `• /avatar – Avatar người dùng\n` +
-      `• /hug – Ôm ai đó\n` +
-      `• /server – Thông tin máy chủ\n` +
-      `• /members – Số thành viên\n` +
-      `• /botinfo – Thông tin bot\n` +
-      `• /github – Link GitHub\n` +
-      `• /say – Bot lặp lại câu bạn nhập\n` +
-      `• /roll – Tung xúc xắc 1-100\n` +
-      `• /uptime – Thời gian bot chạy`
-    );
-  }
+if (commandName === "help") {
+  await interaction.reply(
+    "**📋 Các lệnh có sẵn:**\n\n" +
+    "🔹 `/ping` – Kiểm tra độ trễ\n" +
+    "🔹 `/status` – Trạng thái bot\n" +
+    "🔹 `/info` – Giới thiệu bot\n" +
+    "🔹 `/help` – Danh sách lệnh\n" +
+    "🔹 `/user` – Thông tin người dùng\n" +
+    "🔹 `/avatar` – Avatar người dùng\n" +
+    "🔹 `/hug` – Ôm ai đó\n" +
+    "🔹 `/server` – Thông tin máy chủ\n" +
+    "🔹 `/members` – Số thành viên\n" +
+    "🔹 `/botinfo` – Thông tin bot\n" +
+    "🔹 `/github` – Link GitHub\n" +
+    "🔹 `/say` – Bot lặp lại câu bạn nhập\n" +
+    "🔹 `/roll` – Tung xúc xắc 1-100\n" +
+    "🔹 `/uptime` – Thời gian bot chạy"
+  );
+}
 
   if (commandName === "server") {
     const { guild } = interaction;
