@@ -1,6 +1,12 @@
 require("dotenv").config();
 const express = require("express");
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
+const {
+  Client,
+  GatewayIntentBits,
+  REST,
+  Routes,
+  SlashCommandBuilder
+} = require("discord.js");
 
 const app = express();
 
@@ -39,11 +45,14 @@ const client = new Client({
 client.once("ready", async () => {
   console.log(`🤖 Bot đã sẵn sàng: ${client.user.tag}`);
 
-  // Đăng ký slash command /ping
+  // Đăng ký slash commands
   const commands = [
     new SlashCommandBuilder()
       .setName("ping")
-      .setDescription("Kiểm tra bot có đang hoạt động"),
+      .setDescription("Kiểm tra độ trễ phản hồi của bot"),
+    new SlashCommandBuilder()
+      .setName("status")
+      .setDescription("Hiển thị trạng thái hoạt động của bot")
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
@@ -65,7 +74,19 @@ client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "ping") {
-    await interaction.reply("🏓 Pong!");
+    const ping = Date.now() - interaction.createdTimestamp;
+    await interaction.reply(`🏓 Ping: ${ping} ms`);
+  }
+
+  if (interaction.commandName === "status") {
+    const uptimeSeconds = process.uptime();
+    const minutes = Math.floor(uptimeSeconds / 60);
+    const seconds = Math.floor(uptimeSeconds % 60);
+    await interaction.reply(
+      `**Bot:** Hyggshi OS Bot\n` +
+      `**Trạng thái:** Online\n` +
+      `**Uptime:** ${minutes} phút ${seconds} giây`
+    );
   }
 });
 
