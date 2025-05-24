@@ -103,7 +103,7 @@ client.on("interactionCreate", async interaction => {
   if (commandName === "info") {
     await interaction.reply(
       `🤖 **Hyggshi OS Bot** là trợ lý Discord giúp quản lý máy chủ, gửi phản hồi tự động và hỗ trợ slash commands.\n` +
-      `Được phát triển với ❤️ bởi bạn.`
+      `Được phát triển với ❤️ by Hyggshi OS developer / Nguyễn Minh Phúc`
     );
   }
 
