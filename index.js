@@ -75,6 +75,15 @@ client.once("ready", async () => {
           .setDescription("Người bạn muốn ôm")
           .setRequired(false)
       ),
+    new SlashCommandBuilder()
+  .setName("say")
+  .setDescription("Bot lặp lại câu bạn nhập")
+  .addStringOption(option =>
+    option.setName("message")
+      .setDescription("Câu bạn muốn bot lặp lại")
+      .setRequired(true)
+  ),
+
     new SlashCommandBuilder().setName("uptime").setDescription("Xem thời gian bot đã hoạt động")
   ].map(cmd => cmd.toJSON());
 
@@ -201,6 +210,12 @@ if (commandName === "botinfo") {
 if (commandName === "github") {
   await interaction.reply("🔗 **GitHub:** https://github.com/HyggshiOSDeveloper/Hyggshi-OS-project-center");
 }
+  
+  if (commandName === "say") {
+  const message = interaction.options.getString("message");
+  await interaction.reply(message);
+}
+
   
   if (commandName === "uptime") {
     const uptime = process.uptime();
