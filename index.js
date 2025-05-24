@@ -59,6 +59,7 @@ client.once("ready", async () => {
     new SlashCommandBuilder().setName("members").setDescription("Xem số thành viên trong server"),
     new SlashCommandBuilder().setName("botinfo").setDescription("Thông tin bot: phiên bản, dev, uptime"),
     new SlashCommandBuilder().setName("github").setDescription("Link GitHub của dự án"),
+    new SlashCommandBuilder().setName("say").setDescription("Câu bạn muốn bot lặp lại"),
     new SlashCommandBuilder()
       .setName("avatar")
       .setDescription("Xem avatar của bạn hoặc người khác")
