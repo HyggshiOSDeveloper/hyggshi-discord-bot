@@ -44,22 +44,57 @@ const client = new Client({
 
 client.once("ready", async () => {
   console.log(`🤖 Bot đã sẵn sàng: ${client.user.tag}`);
+// =====================================================================================
+//                                command creation section                                
+// =====================================================================================
+  
+const commands = [
+  new SlashCommandBuilder()
+    .setName("ping")
+    .setDescription("Kiểm tra độ trễ phản hồi của bot"),
 
-  const commands = [
-    new SlashCommandBuilder().setName("ping").setDescription("Kiểm tra độ trễ phản hồi của bot"),
-    new SlashCommandBuilder().setName("status").setDescription("Hiển thị trạng thái hoạt động của bot"),
-    new SlashCommandBuilder().setName("info").setDescription("Giới thiệu về Hyggshi OS Bot"),
-    new SlashCommandBuilder().setName("help").setDescription("Danh sách các lệnh có sẵn"),
-    new SlashCommandBuilder().setName("server").setDescription("Hiển thị thông tin máy chủ"),
-    new SlashCommandBuilder().setName("user").setDescription("Xem thông tin tài khoản Discord của bạn"),
-    new SlashCommandBuilder()
-      .setName("avatar")
-      .setDescription("Xem avatar của bạn hoặc người khác")
-      .addUserOption(option =>
-        option.setName("target")
-          .setDescription("Chọn người dùng")
-          .setRequired(false)
-      ),
+  new SlashCommandBuilder()
+    .setName("status")
+    .setDescription("Hiển thị trạng thái hoạt động của bot"),
+
+  new SlashCommandBuilder()
+    .setName("info")
+    .setDescription("Giới thiệu về Hyggshi OS Bot"),
+
+  new SlashCommandBuilder()
+    .setName("help")
+    .setDescription("Danh sách các lệnh có sẵn"),
+
+  new SlashCommandBuilder()
+    .setName("server")
+    .setDescription("Hiển thị thông tin máy chủ"),
+
+  new SlashCommandBuilder()
+    .setName("user")
+    .setDescription("Xem thông tin tài khoản Discord của bạn"),
+
+  new SlashCommandBuilder()
+    .setName("avatar")
+    .setDescription("Xem avatar của bạn hoặc người khác")
+    .addUserOption(option =>
+      option.setName("target")
+        .setDescription("Người bạn muốn xem avatar")
+        .setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("hug")
+    .setDescription("Ôm một người nào đó trong server")
+    .addUserOption(option =>
+      option.setName("target")
+        .setDescription("Người bạn muốn ôm")
+        .setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("uptime")
+    .setDescription("Xem thời gian bot đã hoạt động")
+  
     new SlashCommandBuilder().setName("uptime").setDescription("Xem thời gian bot đã hoạt động")
   ].map(cmd => cmd.toJSON());
 
