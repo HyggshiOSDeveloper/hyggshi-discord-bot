@@ -60,6 +60,7 @@ client.once("ready", async () => {
     new SlashCommandBuilder().setName("botinfo").setDescription("Thông tin bot: phiên bản, dev, uptime"),
     new SlashCommandBuilder().setName("github").setDescription("Link GitHub của dự án"),
     new SlashCommandBuilder().setName("say").setDescription("Câu bạn muốn bot lặp lại"),
+    new SlashCommandBuilder().setName("roll").setDescription("Tung xúc xắc 1-100 và nhận kết quả ngẫu nhiên"),
     new SlashCommandBuilder()
       .setName("avatar")
       .setDescription("Xem avatar của bạn hoặc người khác")
@@ -145,6 +146,8 @@ client.on("interactionCreate", async interaction => {
       `• /members – Thông tin máy chủ\n` +
       `• /botinfo – Thông tin máy chủ\n` +
       `• /github – Thông tin máy chủ\n` +
+      `• /suy – Câu bạn muốn bot lặp lại\n` +
+      `• /roll – Tung xúc xắc 1-100 và nhận kết quả ngẫu nhiên\n` +
       `• /uptime – Thời gian bot chạy`
     );
   }
@@ -202,7 +205,7 @@ if (commandName === "botinfo") {
   const seconds = Math.floor(uptime % 60);
   await interaction.reply(
     `🤖 **Hyggshi OS Bot**\n` +
-    `• Phiên bản: 1.0.0\n` +
+    `• Phiên bản: 1.2.9 beta 12\n` +
     `• Dev: Nguyễn Minh Phúc\n` +
     `• Uptime: ${hours} giờ ${minutes} phút ${seconds} giây`
   );
@@ -215,6 +218,11 @@ if (commandName === "github") {
   if (commandName === "say") {
   const message = interaction.options.getString("message");
   await interaction.reply(message);
+}
+
+  if (commandName === "roll") {
+  const result = Math.floor(Math.random() * 100) + 1;
+  await interaction.reply(`🎲 Bạn tung được: ${result}`);
 }
 
   
