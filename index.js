@@ -199,7 +199,7 @@ if (commandName === "botinfo") {
 }
 
 if (commandName === "github") {
-  await interaction.reply("🔗 **GitHub:** https://github.com/HyggshiOS");
+  await interaction.reply("🔗 **GitHub:** https://github.com/HyggshiOSDeveloper/Hyggshi-OS-project-center");
 }
   
   if (commandName === "uptime") {
