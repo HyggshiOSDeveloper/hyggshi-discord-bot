@@ -45,23 +45,23 @@ const client = new Client({
 client.once("ready", async () => {
   console.log(`🤖 Bot đã sẵn sàng: ${client.user.tag}`);
 
-  const commands = [
-    new SlashCommandBuilder()
-      .setName("ping")
-      .setDescription("Kiểm tra độ trễ phản hồi của bot"),
-    new SlashCommandBuilder()
-      .setName("status")
-      .setDescription("Hiển thị trạng thái hoạt động của bot"),
-    new SlashCommandBuilder()
-      .setName("info")
-      .setDescription("Giới thiệu về Hyggshi OS Bot"),
-    new SlashCommandBuilder()
-      .setName("help")
-      .setDescription("Danh sách các lệnh có sẵn"),
-    new SlashCommandBuilder()
-      .setName("server")
-      .setDescription("Hiển thị thông tin máy chủ")
-  ].map(cmd => cmd.toJSON());
+ const commands = [
+  new SlashCommandBuilder().setName("ping").setDescription("Kiểm tra độ trễ phản hồi của bot"),
+  new SlashCommandBuilder().setName("status").setDescription("Hiển thị trạng thái hoạt động của bot"),
+  new SlashCommandBuilder().setName("info").setDescription("Giới thiệu về Hyggshi OS Bot"),
+  new SlashCommandBuilder().setName("help").setDescription("Danh sách các lệnh có sẵn"),
+  new SlashCommandBuilder().setName("server").setDescription("Hiển thị thông tin máy chủ"),
+  new SlashCommandBuilder().setName("user").setDescription("Xem thông tin tài khoản Discord của bạn"),
+  new SlashCommandBuilder()
+    .setName("avatar")
+    .setDescription("Xem avatar của bạn hoặc người khác")
+    .addUserOption(option =>
+      option.setName("target")
+        .setDescription("Chọn người dùng")
+        .setRequired(false)
+    )
+].map(cmd => cmd.toJSON());
+
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
@@ -107,6 +107,29 @@ client.on("interactionCreate", async interaction => {
     );
   }
 
+  if (commandName === "user") {
+  const user = interaction.user;
+  await interaction.reply(
+    `🧑‍💻 **Thông tin của bạn:**\n` +
+    `• Tên: ${user.username}#${user.discriminator}\n` +
+    `• ID: ${user.id}\n` +
+    `• Tạo tài khoản: <t:${Math.floor(user.createdTimestamp / 1000)}:R>`
+  );
+}
+
+  if (commandName === "avatar") {
+  const user = interaction.options.getUser("target") || interaction.user;
+  await interaction.reply({
+    content: `🖼️ Avatar của **${user.tag}**:`,
+    embeds: [
+      {
+        image: { url: user.displayAvatarURL({ dynamic: true, size: 1024 }) },
+        color: 0x00aaff
+      }
+    ]
+  });
+}
+  
   if (commandName === "help") {
     await interaction.reply(
       `📋 **Các lệnh có sẵn:**\n` +
@@ -114,6 +137,8 @@ client.on("interactionCreate", async interaction => {
       `• /status – Xem trạng thái bot\n` +
       `• /info – Giới thiệu bot\n` +
       `• /help – Danh sách lệnh\n` +
+      `• /user – Lấy thông tin của chính người dùng gọi lệnh \n` +
+      `• /avatar – Hiển thị avatar của chính bạn hoặc của người được tag \n` +
       `• /server – Thông tin máy chủ`
     );
   }
