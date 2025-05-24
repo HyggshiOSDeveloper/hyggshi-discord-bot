@@ -45,27 +45,23 @@ const client = new Client({
 client.once("ready", async () => {
   console.log(`🤖 Bot đã sẵn sàng: ${client.user.tag}`);
 
-const commands = [
-  new SlashCommandBuilder().setName("ping").setDescription("Kiểm tra độ trễ phản hồi của bot"),
-  new SlashCommandBuilder().setName("status").setDescription("Hiển thị trạng thái hoạt động của bot"),
-  new SlashCommandBuilder().setName("info").setDescription("Giới thiệu về Hyggshi OS Bot"),
-  new SlashCommandBuilder().setName("help").setDescription("Danh sách các lệnh có sẵn"),
-  new SlashCommandBuilder().setName("server").setDescription("Hiển thị thông tin máy chủ"),
-  new SlashCommandBuilder().setName("user").setDescription("Xem thông tin tài khoản Discord của bạn"),
-  new SlashCommandBuilder()
-    .setName("avatar")
-    .setDescription("Xem avatar của bạn hoặc người khác")
-    .addUserOption(option =>
-      option.setName("target")
-        .setDescription("Chọn người dùng")
-        .setRequired(false)
-    ),
-  new SlashCommandBuilder()
-    .setName("uptime")
-    .setDescription("Xem thời gian bot đã hoạt động")
-].map(cmd => cmd.toJSON());
-
-
+  const commands = [
+    new SlashCommandBuilder().setName("ping").setDescription("Kiểm tra độ trễ phản hồi của bot"),
+    new SlashCommandBuilder().setName("status").setDescription("Hiển thị trạng thái hoạt động của bot"),
+    new SlashCommandBuilder().setName("info").setDescription("Giới thiệu về Hyggshi OS Bot"),
+    new SlashCommandBuilder().setName("help").setDescription("Danh sách các lệnh có sẵn"),
+    new SlashCommandBuilder().setName("server").setDescription("Hiển thị thông tin máy chủ"),
+    new SlashCommandBuilder().setName("user").setDescription("Xem thông tin tài khoản Discord của bạn"),
+    new SlashCommandBuilder()
+      .setName("avatar")
+      .setDescription("Xem avatar của bạn hoặc người khác")
+      .addUserOption(option =>
+        option.setName("target")
+          .setDescription("Chọn người dùng")
+          .setRequired(false)
+      ),
+    new SlashCommandBuilder().setName("uptime").setDescription("Xem thời gian bot đã hoạt động")
+  ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
@@ -80,7 +76,6 @@ const commands = [
     console.error("❌ Lỗi khi đăng ký slash command:", err);
   }
 });
-
 
 // Slash command handler
 client.on("interactionCreate", async interaction => {
@@ -107,43 +102,21 @@ client.on("interactionCreate", async interaction => {
   if (commandName === "info") {
     await interaction.reply(
       `🤖 **Hyggshi OS Bot** là trợ lý Discord giúp quản lý máy chủ, gửi phản hồi tự động và hỗ trợ slash commands.\n` +
-      `Được phát triển với ❤️ by Hyggshi OS developer / Nguyễn Minh Phúc`
+      `Được phát triển với ❤️ bởi Hyggshi OS developer / Nguyễn Minh Phúc`
     );
   }
 
-  if (commandName === "user") {
-  const user = interaction.user;
-  await interaction.reply(
-    `🧑‍💻 **Thông tin của bạn:**\n` +
-    `• Tên: ${user.username}#${user.discriminator}\n` +
-    `• ID: ${user.id}\n` +
-    `• Tạo tài khoản: <t:${Math.floor(user.createdTimestamp / 1000)}:R>`
-  );
-}
-
-  if (commandName === "avatar") {
-  const user = interaction.options.getUser("target") || interaction.user;
-  await interaction.reply({
-    content: `🖼️ Avatar của **${user.tag}**:`,
-    embeds: [
-      {
-        image: { url: user.displayAvatarURL({ dynamic: true, size: 1024 }) },
-        color: 0x00aaff
-      }
-    ]
-  });
-}
-  
   if (commandName === "help") {
     await interaction.reply(
       `📋 **Các lệnh có sẵn:**\n` +
       `• /ping – Kiểm tra độ trễ\n` +
-      `• /status – Xem trạng thái bot\n` +
+      `• /status – Trạng thái bot\n` +
       `• /info – Giới thiệu bot\n` +
       `• /help – Danh sách lệnh\n` +
-      `• /user – Lấy thông tin của chính người dùng gọi lệnh \n` +
-      `• /avatar – Hiển thị avatar của chính bạn hoặc của người được tag \n` +
-      `• /server – Thông tin máy chủ`
+      `• /user – Thông tin người dùng\n` +
+      `• /avatar – Avatar người dùng\n` +
+      `• /server – Thông tin máy chủ\n` +
+      `• /uptime – Thời gian bot đã chạy`
     );
   }
 
@@ -155,19 +128,41 @@ client.on("interactionCreate", async interaction => {
       `📆 **Tạo ngày:** <t:${Math.floor(guild.createdTimestamp / 1000)}:R>`
     );
   }
+
+  if (commandName === "user") {
+    const user = interaction.user;
+    await interaction.reply(
+      `🧑‍💻 **Thông tin của bạn:**\n` +
+      `• Tên: ${user.username}#${user.discriminator}\n` +
+      `• ID: ${user.id}\n` +
+      `• Tạo tài khoản: <t:${Math.floor(user.createdTimestamp / 1000)}:R>`
+    );
+  }
+
+  if (commandName === "avatar") {
+    const user = interaction.options.getUser("target") || interaction.user;
+    await interaction.reply({
+      content: `🖼️ Avatar của **${user.tag}**:`,
+      embeds: [
+        {
+          image: { url: user.displayAvatarURL({ dynamic: true, size: 1024 }) },
+          color: 0x00aaff
+        }
+      ]
+    });
+  }
+
+  if (commandName === "uptime") {
+    const uptime = process.uptime();
+    const hours = Math.floor(uptime / 3600);
+    const minutes = Math.floor((uptime % 3600) / 60);
+    const seconds = Math.floor(uptime % 60);
+
+    await interaction.reply(
+      `🕒 **Uptime:** ${hours} giờ ${minutes} phút ${seconds} giây`
+    );
+  }
 });
-
-if (commandName === "uptime") {
-  const uptime = process.uptime();
-  const hours = Math.floor(uptime / 3600);
-  const minutes = Math.floor((uptime % 3600) / 60);
-  const seconds = Math.floor(uptime % 60);
-
-  await interaction.reply(
-    `🕒 **Uptime:** ${hours} giờ ${minutes} phút ${seconds} giây`
-  );
-}
-
 
 // Chat auto-reply
 client.on("messageCreate", (message) => {
@@ -189,3 +184,4 @@ client.on("guildMemberAdd", (member) => {
 
 // Start bot
 client.login(process.env.TOKEN);
+
