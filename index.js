@@ -56,6 +56,9 @@ client.once("ready", async () => {
     new SlashCommandBuilder().setName("help").setDescription("Danh sách các lệnh có sẵn"),
     new SlashCommandBuilder().setName("server").setDescription("Hiển thị thông tin máy chủ"),
     new SlashCommandBuilder().setName("user").setDescription("Xem thông tin tài khoản Discord của bạn"),
+    new SlashCommandBuilder().setName("members").setDescription("Xem số thành viên trong server"),
+    new SlashCommandBuilder().setName("botinfo").setDescription("Thông tin bot: phiên bản, dev, uptime"),
+    new SlashCommandBuilder().setName("github").setDescription("Link GitHub của dự án"),
     new SlashCommandBuilder()
       .setName("avatar")
       .setDescription("Xem avatar của bạn hoặc người khác")
@@ -129,6 +132,9 @@ client.on("interactionCreate", async interaction => {
       `• /avatar – Avatar người dùng\n` +
       `• /hug – Ôm ai đó\n` +
       `• /server – Thông tin máy chủ\n` +
+      `• /members – Thông tin máy chủ\n` +
+      `• /botinfo – Thông tin máy chủ\n` +
+      `• /github – Thông tin máy chủ\n` +
       `• /uptime – Thời gian bot chạy`
     );
   }
@@ -174,6 +180,28 @@ client.on("interactionCreate", async interaction => {
     }
   }
 
+if (commandName === "members") {
+  const memberCount = interaction.guild.memberCount;
+  await interaction.reply(`👥 Thành viên: ${memberCount}`);
+}
+
+if (commandName === "botinfo") {
+  const uptime = process.uptime();
+  const hours = Math.floor(uptime / 3600);
+  const minutes = Math.floor((uptime % 3600) / 60);
+  const seconds = Math.floor(uptime % 60);
+  await interaction.reply(
+    `🤖 **Hyggshi OS Bot**\n` +
+    `• Phiên bản: 1.0.0\n` +
+    `• Dev: Nguyễn Minh Phúc\n` +
+    `• Uptime: ${hours} giờ ${minutes} phút ${seconds} giây`
+  );
+}
+
+if (commandName === "github") {
+  await interaction.reply("🔗 **GitHub:** https://github.com/HyggshiOS");
+}
+  
   if (commandName === "uptime") {
     const uptime = process.uptime();
     const hours = Math.floor(uptime / 3600);
