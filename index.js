@@ -1,18 +1,16 @@
+require("dotenv").config();
 const express = require("express");
-const { Client, GatewayIntentBits } = require("discord.js");
-
-// Fix node-fetch với dynamic import
-const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
 
 const app = express();
 
-// EXPRESS SETUP
+// EXPRESS – giữ bot sống
 app.get("/", (req, res) => {
   res.send("Bot is alive!");
 });
 
 app.get("/ping", (req, res) => {
-  res.json({ status: "ok", message: "Ping received", timestamp: Date.now() });
+  res.json({ status: "ok", timestamp: Date.now() });
 });
 
 app.get("/status", (req, res) => {
@@ -28,7 +26,7 @@ app.listen(PORT, () => {
   console.log(`🌐 Web server is running on port ${PORT}`);
 });
 
-// DISCORD BOT SETUP
+// DISCORD CLIENT
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -38,18 +36,31 @@ const client = new Client({
   ],
 });
 
-client.once("ready", () => {
-  console.log(`🤖 Bot đã sẵn sàng với tên: ${client.user.tag}`);
+client.once("ready", async () => {
+  console.log(`🤖 Bot đã sẵn sàng: ${client.user.tag}`);
 
-  // Gọi tự ping mỗi 4 phút giữ Replit luôn hoạt động
-  setInterval(() => {
-    fetch("https://" + process.env.REPL_SLUG + "." + process.env.REPL_OWNER + ".repl.co")
-      .then(res => console.log(`🔄 Pinged self at ${new Date().toLocaleTimeString()}`))
-      .catch(err => console.error("Ping error:", err));
-  }, 240000); // 4 phút
+  // Đăng ký slash command /ping
+  const commands = [
+    new SlashCommandBuilder()
+      .setName("ping")
+      .setDescription("Kiểm tra bot có đang hoạt động"),
+  ].map(cmd => cmd.toJSON());
+
+  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+
+  try {
+    console.log("📡 Đăng ký slash command...");
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands }
+    );
+    console.log("✅ Slash command đã được đăng ký.");
+  } catch (err) {
+    console.error("❌ Lỗi khi đăng ký slash command:", err);
+  }
 });
 
-// Slash command xử lý
+// Slash command handler
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -58,7 +69,7 @@ client.on("interactionCreate", async interaction => {
   }
 });
 
-// Xử lý tin nhắn văn bản
+// Chat auto-reply
 client.on("messageCreate", (message) => {
   if (message.author.bot) return;
 
@@ -68,7 +79,7 @@ client.on("messageCreate", (message) => {
   }
 });
 
-// Chào mừng thành viên mới
+// Welcome new member
 client.on("guildMemberAdd", (member) => {
   const channel = member.guild.systemChannel;
   if (channel) {
@@ -76,5 +87,5 @@ client.on("guildMemberAdd", (member) => {
   }
 });
 
-// Đăng nhập bot
+// Start bot
 client.login(process.env.TOKEN);
