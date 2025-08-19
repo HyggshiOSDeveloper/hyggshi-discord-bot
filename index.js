@@ -33,6 +33,22 @@ const client = new Client({
   ]
 });
 
+client.once("ready", () => {
+  console.log(`🤖 Bot ready: ${client.user.tag}`);
+
+  // Set activity / trạng thái
+  client.user.setPresence({
+    status: "online", // online, idle, dnd, invisible
+    activities: [
+      {
+        name: "Hyggshi OS Bot | ?help", // nội dung hiển thị
+        type: 0 // 0 = Playing, 1 = Streaming, 2 = Listening, 3 = Watching
+      }
+    ]
+  });
+});
+
+
 // ==== READY & REGISTER SLASH COMMANDS ====
 client.once("ready", async () => {
   console.log(`🤖 Bot ready: ${client.user.tag}`);
@@ -197,3 +213,4 @@ client.on("guildMemberAdd", (member) => {
 
 // ==== START BOT ====
 client.login(process.env.TOKEN);
+
