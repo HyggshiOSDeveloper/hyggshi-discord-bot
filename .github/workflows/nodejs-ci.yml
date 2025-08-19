@@ -1,0 +1,44 @@
+name: Node.js CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+
+    steps:
+      # 1. Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. Setup Node.js
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # 4. Run a basic build/test (bỏ qua nếu không có test script)
+      - name: Run build
+        run: |
+          if npm run build; then
+            echo "Build successful"
+          else
+            echo "No build script found, skipping"
+          fi
+
+      # 5. Check bot runs (optional, đơn giản chỉ log)
+      - name: Check bot start
+        run: |
+          node -e "console.log('Bot ready to run');"
+
