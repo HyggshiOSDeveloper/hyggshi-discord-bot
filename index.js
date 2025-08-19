@@ -41,7 +41,7 @@ client.once("ready", () => {
     status: "online", // online, idle, dnd, invisible
     activities: [
       {
-        name: "Hyggshi OS Bot | ?help", // nội dung hiển thị
+        name: "Hyggshi OS Bot | /help", // nội dung hiển thị
         type: 0 // 0 = Playing, 1 = Streaming, 2 = Listening, 3 = Watching
       }
     ]
@@ -213,4 +213,5 @@ client.on("guildMemberAdd", (member) => {
 
 // ==== START BOT ====
 client.login(process.env.TOKEN);
+
 
