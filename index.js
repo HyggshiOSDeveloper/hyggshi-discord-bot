@@ -137,7 +137,7 @@ client.on("interactionCreate", async interaction => {
   }
 
   if (commandName === "botinfo") {
-    await interaction.reply(`🤖 **Hyggshi OS Bot**\n• Phiên bản: 1.2.9 beta 12\n• Dev: Nguyễn Minh Phúc\n• Uptime: ${hours} giờ ${minutes} phút ${seconds} giây`);
+    await interaction.reply(`🤖 **Hyggshi OS Bot**\n• Phiên bản: 1.6.4 beta 19\n• Dev: Nguyễn Minh Phúc\n• Uptime: ${hours} giờ ${minutes} phút ${seconds} giây`);
   }
 
   if (commandName === "github") {
@@ -213,5 +213,6 @@ client.on("guildMemberAdd", (member) => {
 
 // ==== START BOT ====
 client.login(process.env.TOKEN);
+
 
 
