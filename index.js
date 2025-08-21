@@ -185,7 +185,7 @@ client.on("interactionCreate", async interaction => {
 client.on("messageCreate", (message) => {
   if (message.author.bot) return;
   const content = message.content.toLowerCase();
-  if (["hi", "hello"].includes(content)) {
+  if (["hi", "hello","Hello bạn"].includes(content)) {
     message.reply("Chào bạn đến với server nhé! 😊");
   }
 });
@@ -213,6 +213,7 @@ client.on("guildMemberAdd", (member) => {
 
 // ==== START BOT ====
 client.login(process.env.TOKEN);
+
 
 
 
