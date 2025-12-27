@@ -137,7 +137,7 @@ client.on("interactionCreate", async interaction => {
   }
 
   if (commandName === "botinfo") {
-    await interaction.reply(`🤖 **Hyggshi OS Bot**\n• Phiên bản: 1.6.9 beta 23\n• Dev: Nguyễn Minh Phúc\n• Uptime: ${hours} giờ ${minutes} phút ${seconds} giây`);
+    await interaction.reply(`🤖 **Hyggshi OS Bot**\n• Phiên bản: 1.7.0 beta 27\n• Dev: Nguyễn Minh Phúc\n• Uptime: ${hours} giờ ${minutes} phút ${seconds} giây`);
   }
 
   if (commandName === "github") {
@@ -186,7 +186,7 @@ client.on("messageCreate", (message) => {
   if (message.author.bot) return;
   const content = message.content.toLowerCase();
   if (["hi", "hello","Hello bạn"].includes(content)) {
-    message.reply("Chào bạn đến với server nhé! 😊");
+    message.reply("Welcome to the server! 😊");
   }
 });
 
@@ -213,6 +213,7 @@ client.on("guildMemberAdd", (member) => {
 
 // ==== START BOT ====
 client.login(process.env.TOKEN);
+
 
 
 
