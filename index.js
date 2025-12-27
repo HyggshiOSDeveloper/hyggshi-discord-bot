@@ -1,69 +1,64 @@
-// ==== CLOUDFLARE WORKERS DISCORD BOT ====
-// Phiên bản: 2.0.0 for Cloudflare
-// Dev: Nguyễn Minh Phúc
+/**
+ * Hyggshi OS Discord Bot - Cloudflare Workers
+ * Version: 2.0.1
+ * Dev: Nguyễn Minh Phúc
+ */
 
-// ==== CONFIG ====
 const BOT_START_TIME = Date.now();
 
-// ==== VERIFY DISCORD SIGNATURE (Ed25519) ====
-async function verifyDiscordRequest(request, publicKey) {
+// ==== HELPER FUNCTIONS ====
+function hexToUint8Array(hex) {
+  const matches = hex.match(/.{1,2}/g);
+  return new Uint8Array(matches.map(byte => parseInt(byte, 16)));
+}
+
+async function verifyDiscordSignature(request, publicKey) {
   const signature = request.headers.get('x-signature-ed25519');
   const timestamp = request.headers.get('x-signature-timestamp');
-  const body = await request.clone().text();
-
+  
   if (!signature || !timestamp || !publicKey) {
     return { isValid: false, body: null };
   }
 
+  const body = await request.text();
+  const message = timestamp + body;
+
   try {
-    const isValid = await verifyEd25519(
-      signature,
-      timestamp + body,
-      publicKey
+    // Import public key
+    const keyData = hexToUint8Array(publicKey);
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      {
+        name: 'Ed25519',
+        namedCurve: 'Ed25519',
+      },
+      false,
+      ['verify']
     );
+
+    // Verify signature
+    const signatureData = hexToUint8Array(signature);
+    const messageData = new TextEncoder().encode(message);
     
-    return { 
-      isValid, 
-      body: isValid ? JSON.parse(body) : null 
+    const isValid = await crypto.subtle.verify(
+      'Ed25519',
+      cryptoKey,
+      signatureData,
+      messageData
+    );
+
+    return {
+      isValid,
+      body: isValid ? JSON.parse(body) : null
     };
-  } catch (err) {
-    console.error('Verification error:', err);
+  } catch (error) {
+    console.error('Verification error:', error);
     return { isValid: false, body: null };
   }
 }
 
-// Ed25519 verification using Web Crypto API
-async function verifyEd25519(signature, message, publicKey) {
-  const encoder = new TextEncoder();
-  
-  const key = await crypto.subtle.importKey(
-    'raw',
-    hexToBytes(publicKey),
-    {
-      name: 'Ed25519',
-      namedCurve: 'Ed25519'
-    },
-    false,
-    ['verify']
-  );
-
-  return await crypto.subtle.verify(
-    'Ed25519',
-    key,
-    hexToBytes(signature),
-    encoder.encode(message)
-  );
-}
-
-function hexToBytes(hex) {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
-  }
-  return bytes;
-}
-
-// ==== COMMANDS DATA ====
+// ==== COMMANDS ====
 const COMMANDS = [
   { name: 'ping', description: 'Kiểm tra độ trễ phản hồi của bot' },
   { name: 'status', description: 'Hiển thị trạng thái bot' },
@@ -111,13 +106,15 @@ const COMMANDS = [
 
 // ==== COMMAND HANDLERS ====
 function handleCommand(interaction) {
-  const { data, member, guild_id } = interaction;
+  const { data, member, guild_id, user } = interaction;
   const commandName = data.name;
   
   const uptime = Date.now() - BOT_START_TIME;
   const hours = Math.floor(uptime / 3600000);
   const minutes = Math.floor((uptime % 3600000) / 60000);
   const seconds = Math.floor((uptime % 60000) / 1000);
+
+  const currentUser = member?.user || user;
 
   switch (commandName) {
     case 'ping':
@@ -157,16 +154,15 @@ function handleCommand(interaction) {
       };
 
     case 'user':
-      const user = member?.user || interaction.user;
       return {
         embeds: [{
           title: '🧑‍💻 Thông tin của bạn',
           fields: [
-            { name: 'Username', value: user.username, inline: true },
-            { name: 'ID', value: user.id, inline: true },
-            { name: 'Avatar', value: `[Xem avatar](https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png)`, inline: false }
+            { name: 'Username', value: currentUser.username, inline: true },
+            { name: 'ID', value: currentUser.id, inline: true },
+            { name: 'Avatar', value: `[Xem avatar](https://cdn.discordapp.com/avatars/${currentUser.id}/${currentUser.avatar}.png)`, inline: false }
           ],
-          thumbnail: { url: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` },
+          thumbnail: { url: `https://cdn.discordapp.com/avatars/${currentUser.id}/${currentUser.avatar}.png` },
           color: 0x5865f2
         }]
       };
@@ -179,7 +175,7 @@ function handleCommand(interaction) {
         embeds: [{
           title: '🤖 Hyggshi OS Bot',
           fields: [
-            { name: 'Phiên bản', value: '2.0.0 (Cloudflare)', inline: true },
+            { name: 'Phiên bản', value: '2.0.1 (Cloudflare)', inline: true },
             { name: 'Dev', value: 'Nguyễn Minh Phúc', inline: true },
             { name: 'Uptime', value: `${hours}h ${minutes}m ${seconds}s`, inline: false },
             { name: 'Platform', value: '⚡ Cloudflare Workers', inline: true }
@@ -210,7 +206,7 @@ function handleCommand(interaction) {
 
     case 'avatar':
       const target = data.options?.find(opt => opt.name === 'target');
-      const targetUser = target ? interaction.data.resolved.users[target.value] : (member?.user || interaction.user);
+      const targetUser = target ? interaction.data.resolved.users[target.value] : currentUser;
       return {
         embeds: [{
           title: `🖼️ Avatar của ${targetUser.username}`,
@@ -225,23 +221,11 @@ function handleCommand(interaction) {
         return { content: '🤗 Bạn đã tự ôm mình rồi đó... dễ thương quá!' };
       }
       const hugUser = interaction.data.resolved.users[hugTarget.value];
-      const huggerUser = member?.user || interaction.user;
-      return { content: `🤗 <@${huggerUser.id}> đã ôm <@${hugUser.id}>! 💕` };
+      return { content: `🤗 <@${currentUser.id}> đã ôm <@${hugUser.id}>! 💕` };
 
     default:
       return { content: '❌ Lệnh không tồn tại!' };
   }
-}
-
-// ==== JSON RESPONSE HELPER ====
-function jsonResponse(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    }
-  });
 }
 
 // ==== MAIN WORKER ====
@@ -260,62 +244,85 @@ export default {
       });
     }
 
-    // Health check endpoints
-    if (url.pathname === '/') {
-      return new Response('🤖 Hyggshi OS Bot is alive on Cloudflare Workers!', {
-        headers: { 'Content-Type': 'text/plain' }
-      });
-    }
-
-    if (url.pathname === '/ping') {
-      return jsonResponse({ 
+    // Health check
+    if (url.pathname === '/' || url.pathname === '/ping') {
+      return new Response(JSON.stringify({ 
         status: 'ok', 
         timestamp: Date.now(),
-        platform: 'Cloudflare Workers'
+        platform: 'Cloudflare Workers',
+        version: '2.0.1'
+      }), {
+        headers: { 'Content-Type': 'application/json' }
       });
     }
 
+    // Commands list
     if (url.pathname === '/commands') {
-      return jsonResponse(COMMANDS);
+      return new Response(JSON.stringify(COMMANDS, null, 2), {
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
-    // Discord interactions endpoint
+    // Discord interactions
     if (url.pathname === '/interactions' && request.method === 'POST') {
       const publicKey = env.DISCORD_PUBLIC_KEY;
       
       if (!publicKey) {
-        return jsonResponse({ error: 'DISCORD_PUBLIC_KEY not configured' }, 500);
+        console.error('DISCORD_PUBLIC_KEY not set');
+        return new Response(JSON.stringify({ 
+          error: 'DISCORD_PUBLIC_KEY not configured' 
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
 
-      const { isValid, body } = await verifyDiscordRequest(request, publicKey);
+      const { isValid, body } = await verifyDiscordSignature(request, publicKey);
       
       if (!isValid) {
-        return jsonResponse({ error: 'Invalid request signature' }, 401);
+        console.error('Invalid signature');
+        return new Response(JSON.stringify({ 
+          error: 'Invalid request signature' 
+        }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
 
-      // Handle Discord PING
+      // Handle Discord PING (type 1)
       if (body.type === 1) {
-        return jsonResponse({ type: 1 });
+        return new Response(JSON.stringify({ type: 1 }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
 
-      // Handle slash commands
+      // Handle slash commands (type 2)
       if (body.type === 2) {
         try {
           const responseData = handleCommand(body);
-          return jsonResponse({
+          return new Response(JSON.stringify({
             type: 4,
             data: responseData
+          }), {
+            headers: { 'Content-Type': 'application/json' }
           });
         } catch (error) {
           console.error('Command error:', error);
-          return jsonResponse({
+          return new Response(JSON.stringify({
             type: 4,
             data: { content: '❌ Đã xảy ra lỗi khi xử lý lệnh!' }
+          }), {
+            headers: { 'Content-Type': 'application/json' }
           });
         }
       }
 
-      return jsonResponse({ error: 'Unknown interaction type' }, 400);
+      return new Response(JSON.stringify({ 
+        error: 'Unknown interaction type' 
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     return new Response('404 Not Found', { status: 404 });
