@@ -41,8 +41,8 @@ client.once("ready", () => {
     status: "online", // online, idle, dnd, invisible
     activities: [
       {
-        name: "Youtube | /help", // nội dung hiển thị
-        type: 3 // 0 = Playing, 1 = Streaming, 2 = Listening, 3 = Watching
+        name: "Music | /help", // nội dung hiển thị
+        type: 0 // 0 = Playing, 1 = Streaming, 2 = Listening, 3 = Watching
       }
     ]
   });
@@ -213,6 +213,7 @@ client.on("guildMemberAdd", (member) => {
 
 // ==== START BOT ====
 client.login(process.env.TOKEN);
+
 
 
 
