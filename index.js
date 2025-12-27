@@ -1,330 +1,331 @@
-/**
- * Hyggshi OS Discord Bot - Cloudflare Workers
- * Version: 2.0.1
- * Dev: Nguyễn Minh Phúc
- */
+require("dotenv").config();
+const express = require("express");
+const {
+  Client,
+  GatewayIntentBits,
+  REST,
+  Routes,
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActivityType
+} = require("discord.js");
 
-const BOT_START_TIME = Date.now();
+const app = express();
 
-// ==== HELPER FUNCTIONS ====
-function hexToUint8Array(hex) {
-  const matches = hex.match(/.{1,2}/g);
-  return new Uint8Array(matches.map(byte => parseInt(byte, 16)));
-}
+// ==== EXPRESS – Health check ====
+app.get("/", (req, res) => res.send("🤖 Hyggshi OS Bot is alive!"));
+app.get("/ping", (req, res) => res.json({ 
+  status: "ok", 
+  timestamp: Date.now(),
+  uptime: process.uptime()
+}));
+app.get("/status", (req, res) => res.json({
+  status: "online",
+  bot: client.user?.tag || "Starting...",
+  uptime: process.uptime(),
+  guilds: client.guilds?.cache.size || 0
+}));
 
-async function verifyDiscordSignature(request, publicKey) {
-  const signature = request.headers.get('x-signature-ed25519');
-  const timestamp = request.headers.get('x-signature-timestamp');
-  
-  if (!signature || !timestamp || !publicKey) {
-    return { isValid: false, body: null };
-  }
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🌐 Web server running on port ${PORT}`));
 
-  const body = await request.text();
-  const message = timestamp + body;
+// ==== DISCORD CLIENT ====
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+  ]
+});
+
+// ==== BOT READY ====
+client.once("ready", async () => {
+  console.log(`✅ Bot ready: ${client.user.tag}`);
+  console.log(`📊 Serving ${client.guilds.cache.size} servers`);
+
+  // Set presence
+  client.user.setPresence({
+    status: "online",
+    activities: [{
+      name: "Music | /help",
+      type: ActivityType.Listening
+    }]
+  });
+
+  // Register slash commands
+  await registerCommands();
+});
+
+// ==== REGISTER SLASH COMMANDS ====
+async function registerCommands() {
+  const commands = [
+    new SlashCommandBuilder().setName("ping").setDescription("Kiểm tra độ trễ phản hồi của bot"),
+    new SlashCommandBuilder().setName("status").setDescription("Hiển thị trạng thái bot"),
+    new SlashCommandBuilder().setName("info").setDescription("Giới thiệu bot"),
+    new SlashCommandBuilder().setName("help").setDescription("Danh sách lệnh có sẵn"),
+    new SlashCommandBuilder().setName("server").setDescription("Thông tin máy chủ"),
+    new SlashCommandBuilder().setName("user").setDescription("Xem thông tin tài khoản Discord"),
+    new SlashCommandBuilder().setName("members").setDescription("Số thành viên trong server"),
+    new SlashCommandBuilder().setName("botinfo").setDescription("Thông tin bot"),
+    new SlashCommandBuilder().setName("github").setDescription("Link GitHub dự án"),
+    new SlashCommandBuilder()
+      .setName("say")
+      .setDescription("Bot lặp lại câu bạn nhập")
+      .addStringOption(option => 
+        option.setName("message")
+          .setDescription("Câu bạn muốn bot lặp lại")
+          .setRequired(true)
+      ),
+    new SlashCommandBuilder().setName("roll").setDescription("Tung xúc xắc 1-100"),
+    new SlashCommandBuilder().setName("flip").setDescription("Tung đồng xu (Heads/Tails)"),
+    new SlashCommandBuilder()
+      .setName("avatar")
+      .setDescription("Xem avatar của bạn hoặc người khác")
+      .addUserOption(option => 
+        option.setName("target")
+          .setDescription("Người bạn muốn xem avatar")
+          .setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName("hug")
+      .setDescription("Ôm một người nào đó")
+      .addUserOption(option => 
+        option.setName("target")
+          .setDescription("Người muốn ôm")
+          .setRequired(false)
+      ),
+    new SlashCommandBuilder().setName("uptime").setDescription("Xem thời gian bot chạy")
+  ].map(cmd => cmd.toJSON());
+
+  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
   try {
-    // Import public key
-    const keyData = hexToUint8Array(publicKey);
-    const cryptoKey = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      {
-        name: 'Ed25519',
-        namedCurve: 'Ed25519',
-      },
-      false,
-      ['verify']
+    console.log("📡 Đăng ký slash commands...");
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands }
     );
-
-    // Verify signature
-    const signatureData = hexToUint8Array(signature);
-    const messageData = new TextEncoder().encode(message);
-    
-    const isValid = await crypto.subtle.verify(
-      'Ed25519',
-      cryptoKey,
-      signatureData,
-      messageData
-    );
-
-    return {
-      isValid,
-      body: isValid ? JSON.parse(body) : null
-    };
-  } catch (error) {
-    console.error('Verification error:', error);
-    return { isValid: false, body: null };
+    console.log("✅ Slash commands đã đăng ký thành công!");
+  } catch (err) {
+    console.error("❌ Lỗi khi đăng ký commands:", err);
   }
 }
 
-// ==== COMMANDS ====
-const COMMANDS = [
-  { name: 'ping', description: 'Kiểm tra độ trễ phản hồi của bot' },
-  { name: 'status', description: 'Hiển thị trạng thái bot' },
-  { name: 'info', description: 'Giới thiệu bot' },
-  { name: 'help', description: 'Danh sách lệnh có sẵn' },
-  { name: 'server', description: 'Thông tin máy chủ' },
-  { name: 'user', description: 'Xem thông tin tài khoản Discord' },
-  { name: 'members', description: 'Số thành viên trong server' },
-  { name: 'botinfo', description: 'Thông tin bot' },
-  { name: 'github', description: 'Link GitHub dự án' },
-  { 
-    name: 'say', 
-    description: 'Bot lặp lại câu bạn nhập',
-    options: [{
-      type: 3,
-      name: 'message',
-      description: 'Câu bạn muốn bot lặp lại',
-      required: true
-    }]
-  },
-  { name: 'roll', description: 'Tung xúc xắc 1-100' },
-  { name: 'flip', description: 'Tung đồng xu (Heads/Tails)' },
-  { 
-    name: 'avatar', 
-    description: 'Xem avatar của bạn hoặc người khác',
-    options: [{
-      type: 6,
-      name: 'target',
-      description: 'Người bạn muốn xem avatar',
-      required: false
-    }]
-  },
-  { 
-    name: 'hug', 
-    description: 'Ôm một người nào đó',
-    options: [{
-      type: 6,
-      name: 'target',
-      description: 'Người muốn ôm',
-      required: false
-    }]
-  },
-  { name: 'uptime', description: 'Xem thời gian bot chạy' }
+// ==== SLASH COMMAND HANDLER ====
+client.on("interactionCreate", async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+  
+  const { commandName } = interaction;
+  const uptime = process.uptime();
+  const hours = Math.floor(uptime / 3600);
+  const minutes = Math.floor((uptime % 3600) / 60);
+  const seconds = Math.floor(uptime % 60);
+
+  try {
+    switch (commandName) {
+      case "ping":
+        const ping = Date.now() - interaction.createdTimestamp;
+        await interaction.reply(`🏓 Pong! Latency: ${ping}ms | API: ${Math.round(client.ws.ping)}ms`);
+        break;
+
+      case "status":
+        await interaction.reply(
+          `**Bot:** Hyggshi OS Bot\n` +
+          `**Trạng thái:** Online ✅\n` +
+          `**Uptime:** ${hours}h ${minutes}m ${seconds}s\n` +
+          `**Servers:** ${client.guilds.cache.size}\n` +
+          `**Platform:** Railway`
+        );
+        break;
+
+      case "info":
+        await interaction.reply(
+          `🤖 **Hyggshi OS Bot** là trợ lý Discord hỗ trợ quản lý server.\n` +
+          `❤️ Dev: Nguyễn Minh Phúc\n` +
+          `🚂 Hosted on Railway`
+        );
+        break;
+
+      case "help":
+        await interaction.reply({
+          embeds: [{
+            title: "📋 Danh sách lệnh",
+            description: 
+              "🔹 `/ping` - Kiểm tra độ trễ\n" +
+              "🔹 `/status` - Trạng thái bot\n" +
+              "🔹 `/info` - Giới thiệu\n" +
+              "🔹 `/help` - Danh sách lệnh\n" +
+              "🔹 `/user` - Thông tin tài khoản\n" +
+              "🔹 `/avatar` - Xem avatar\n" +
+              "🔹 `/hug @user` - Ôm ai đó\n" +
+              "🔹 `/server` - Thông tin server\n" +
+              "🔹 `/members` - Số thành viên\n" +
+              "🔹 `/botinfo` - Thông tin bot\n" +
+              "🔹 `/github` - Link GitHub\n" +
+              "🔹 `/say <text>` - Bot lặp lại\n" +
+              "🔹 `/roll` - Tung xúc xắc\n" +
+              "🔹 `/flip` - Tung đồng xu\n" +
+              "🔹 `/uptime` - Thời gian chạy",
+            color: 0x00aaff,
+            footer: { text: "Hyggshi OS Bot v2.1" }
+          }]
+        });
+        break;
+
+      case "server":
+        const { guild } = interaction;
+        await interaction.reply({
+          embeds: [{
+            title: "🏠 Thông tin Server",
+            fields: [
+              { name: "Tên", value: guild.name, inline: true },
+              { name: "Thành viên", value: `${guild.memberCount}`, inline: true },
+              { name: "Ngày tạo", value: `<t:${Math.floor(guild.createdTimestamp/1000)}:R>`, inline: false }
+            ],
+            thumbnail: { url: guild.iconURL() },
+            color: 0x00ff00
+          }]
+        });
+        break;
+
+      case "user":
+        const user = interaction.user;
+        await interaction.reply({
+          embeds: [{
+            title: "🧑‍💻 Thông tin của bạn",
+            fields: [
+              { name: "Username", value: user.tag, inline: true },
+              { name: "ID", value: user.id, inline: true },
+              { name: "Ngày tạo", value: `<t:${Math.floor(user.createdTimestamp/1000)}:R>`, inline: false }
+            ],
+            thumbnail: { url: user.displayAvatarURL({ dynamic: true }) },
+            color: 0x5865f2
+          }]
+        });
+        break;
+
+      case "members":
+        await interaction.reply(`👥 Server có **${interaction.guild.memberCount}** thành viên`);
+        break;
+
+      case "botinfo":
+        await interaction.reply({
+          embeds: [{
+            title: "🤖 Hyggshi OS Bot",
+            fields: [
+              { name: "Phiên bản", value: "2.1.0 (Railway)", inline: true },
+              { name: "Dev", value: "Nguyễn Minh Phúc", inline: true },
+              { name: "Uptime", value: `${hours}h ${minutes}m ${seconds}s`, inline: false },
+              { name: "Servers", value: `${client.guilds.cache.size}`, inline: true },
+              { name: "Platform", value: "🚂 Railway", inline: true }
+            ],
+            color: 0xf38020
+          }]
+        });
+        break;
+
+      case "github":
+        await interaction.reply("🔗 **GitHub:** https://github.com/HyggshiOSDeveloper/hyggshi-discord-bot");
+        break;
+
+      case "say":
+        const message = interaction.options.getString("message");
+        await interaction.reply(message);
+        break;
+
+      case "roll":
+        const result = Math.floor(Math.random() * 100) + 1;
+        await interaction.reply(`🎲 Bạn tung được: **${result}**`);
+        break;
+
+      case "flip":
+        const coin = Math.random() < 0.5 ? "Heads 🪙" : "Tails 🪙";
+        await interaction.reply(`💰 Coin flip: **${coin}**`);
+        break;
+
+      case "uptime":
+        await interaction.reply(`🕒 Bot đã chạy được: **${hours}** giờ **${minutes}** phút **${seconds}** giây`);
+        break;
+
+      case "avatar":
+        const target = interaction.options.getUser("target") || interaction.user;
+        await interaction.reply({
+          embeds: [{
+            title: `🖼️ Avatar của ${target.tag}`,
+            image: { url: target.displayAvatarURL({ dynamic: true, size: 1024 }) },
+            color: 0x00aaff
+          }]
+        });
+        break;
+
+      case "hug":
+        const hugTarget = interaction.options.getUser("target");
+        if (!hugTarget || hugTarget.id === interaction.user.id) {
+          await interaction.reply("🤗 Bạn đã tự ôm mình rồi đó... dễ thương quá!");
+        } else {
+          await interaction.reply(`🤗 ${interaction.user} đã ôm ${hugTarget}! 💕`);
+        }
+        break;
+
+      default:
+        await interaction.reply("❌ Lệnh không tồn tại!");
+    }
+  } catch (error) {
+    console.error("Command error:", error);
+    if (!interaction.replied) {
+      await interaction.reply("❌ Đã xảy ra lỗi khi xử lý lệnh!");
+    }
+  }
+});
+
+// ==== AUTO-REPLY ====
+client.on("messageCreate", (message) => {
+  if (message.author.bot) return;
+  
+  const content = message.content.toLowerCase();
+  if (["hi", "hello", "chào"].includes(content)) {
+    message.reply("Xin chào! Dùng `/help` để xem danh sách lệnh nhé! 😊");
+  }
+});
+
+// ==== WELCOME NEW MEMBER ====
+const welcomes = [
+  "Chào bạn đến server! 🥳",
+  "Rất vui khi thấy bạn! 😄",
+  "Hãy tận hưởng thời gian ở đây nhé! 🎈",
+  "Xin chào! Chúc bạn có trải nghiệm tuyệt vời! ✨"
 ];
 
-// ==== COMMAND HANDLERS ====
-function handleCommand(interaction) {
-  const { data, member, guild_id, user } = interaction;
-  const commandName = data.name;
-  
-  const uptime = Date.now() - BOT_START_TIME;
-  const hours = Math.floor(uptime / 3600000);
-  const minutes = Math.floor((uptime % 3600000) / 60000);
-  const seconds = Math.floor((uptime % 60000) / 1000);
-
-  const currentUser = member?.user || user;
-
-  switch (commandName) {
-    case 'ping':
-      return { content: `🏓 Pong! Bot đang hoạt động tốt.` };
-
-    case 'status':
-      return { 
-        content: `**Bot:** Hyggshi OS Bot\n**Trạng thái:** Online ✅\n**Uptime:** ${hours}h ${minutes}m ${seconds}s` 
-      };
-
-    case 'info':
-      return { 
-        content: `🤖 **Hyggshi OS Bot** là trợ lý Discord hỗ trợ quản lý server và phản hồi tự động.\n❤️ Dev: Nguyễn Minh Phúc\n⚡ Powered by Cloudflare Workers` 
-      };
-
-    case 'help':
-      return {
-        embeds: [{
-          title: '📋 Danh sách lệnh',
-          description: COMMANDS.map(cmd => `🔹 \`/${cmd.name}\` - ${cmd.description}`).join('\n'),
-          color: 0x00aaff,
-          footer: { text: 'Hyggshi OS Bot v2.0' }
-        }]
-      };
-
-    case 'server':
-      return {
-        embeds: [{
-          title: '🏠 Thông tin Server',
-          fields: [
-            { name: 'Server ID', value: guild_id || 'N/A', inline: true },
-            { name: 'Vị trí', value: 'Cloudflare Edge', inline: true }
-          ],
-          color: 0x00ff00,
-          timestamp: new Date().toISOString()
-        }]
-      };
-
-    case 'user':
-      return {
-        embeds: [{
-          title: '🧑‍💻 Thông tin của bạn',
-          fields: [
-            { name: 'Username', value: currentUser.username, inline: true },
-            { name: 'ID', value: currentUser.id, inline: true },
-            { name: 'Avatar', value: `[Xem avatar](https://cdn.discordapp.com/avatars/${currentUser.id}/${currentUser.avatar}.png)`, inline: false }
-          ],
-          thumbnail: { url: `https://cdn.discordapp.com/avatars/${currentUser.id}/${currentUser.avatar}.png` },
-          color: 0x5865f2
-        }]
-      };
-
-    case 'members':
-      return { content: '👥 Thông tin thành viên đang được cập nhật...' };
-
-    case 'botinfo':
-      return {
-        embeds: [{
-          title: '🤖 Hyggshi OS Bot',
-          fields: [
-            { name: 'Phiên bản', value: '2.0.1 (Cloudflare)', inline: true },
-            { name: 'Dev', value: 'Nguyễn Minh Phúc', inline: true },
-            { name: 'Uptime', value: `${hours}h ${minutes}m ${seconds}s`, inline: false },
-            { name: 'Platform', value: '⚡ Cloudflare Workers', inline: true }
-          ],
-          color: 0xf38020
-        }]
-      };
-
-    case 'github':
-      return { 
-        content: '🔗 **GitHub:** https://github.com/HyggshiOSDeveloper/Hyggshi-OS-project-center' 
-      };
-
-    case 'say':
-      const message = data.options?.find(opt => opt.name === 'message')?.value;
-      return { content: message || '(Không có tin nhắn)' };
-
-    case 'roll':
-      const result = Math.floor(Math.random() * 100) + 1;
-      return { content: `🎲 Bạn tung được: **${result}**` };
-
-    case 'flip':
-      const coin = Math.random() < 0.5 ? 'Heads 🪙' : 'Tails 🪙';
-      return { content: `💰 Coin flip: **${coin}**` };
-
-    case 'uptime':
-      return { content: `🕒 Bot đã chạy được: **${hours}** giờ **${minutes}** phút **${seconds}** giây` };
-
-    case 'avatar':
-      const target = data.options?.find(opt => opt.name === 'target');
-      const targetUser = target ? interaction.data.resolved.users[target.value] : currentUser;
-      return {
-        embeds: [{
-          title: `🖼️ Avatar của ${targetUser.username}`,
-          image: { url: `https://cdn.discordapp.com/avatars/${targetUser.id}/${targetUser.avatar}.png?size=1024` },
-          color: 0x00aaff
-        }]
-      };
-
-    case 'hug':
-      const hugTarget = data.options?.find(opt => opt.name === 'target');
-      if (!hugTarget) {
-        return { content: '🤗 Bạn đã tự ôm mình rồi đó... dễ thương quá!' };
-      }
-      const hugUser = interaction.data.resolved.users[hugTarget.value];
-      return { content: `🤗 <@${currentUser.id}> đã ôm <@${hugUser.id}>! 💕` };
-
-    default:
-      return { content: '❌ Lệnh không tồn tại!' };
+client.on("guildMemberAdd", (member) => {
+  const channel = member.guild.channels.cache.find(ch => ch.name === "welcome");
+  if (channel) {
+    const embed = new EmbedBuilder()
+      .setTitle("🎉 Chào mừng!")
+      .setDescription(`${welcomes[Math.floor(Math.random() * welcomes.length)]} ${member.user}`)
+      .setColor(0x00ff00)
+      .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+      .setTimestamp();
+    channel.send({ embeds: [embed] });
   }
+});
+
+// ==== ERROR HANDLING ====
+process.on('unhandledRejection', error => {
+  console.error('Unhandled promise rejection:', error);
+});
+
+client.on('error', error => {
+  console.error('Discord client error:', error);
+});
+
+// ==== LOGIN ====
+if (!process.env.TOKEN) {
+  console.error("❌ DISCORD TOKEN không được cấu hình trong file .env!");
+  process.exit(1);
 }
 
-// ==== MAIN WORKER ====
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-
-    // CORS preflight
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': '*'
-        }
-      });
-    }
-
-    // Health check
-    if (url.pathname === '/' || url.pathname === '/ping') {
-      return new Response(JSON.stringify({ 
-        status: 'ok', 
-        timestamp: Date.now(),
-        platform: 'Cloudflare Workers',
-        version: '2.0.1'
-      }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Commands list
-    if (url.pathname === '/commands') {
-      return new Response(JSON.stringify(COMMANDS, null, 2), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Discord interactions
-    if (url.pathname === '/interactions' && request.method === 'POST') {
-      const publicKey = env.DISCORD_PUBLIC_KEY;
-      
-      if (!publicKey) {
-        console.error('DISCORD_PUBLIC_KEY not set');
-        return new Response(JSON.stringify({ 
-          error: 'DISCORD_PUBLIC_KEY not configured' 
-        }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-
-      const { isValid, body } = await verifyDiscordSignature(request, publicKey);
-      
-      if (!isValid) {
-        console.error('Invalid signature');
-        return new Response(JSON.stringify({ 
-          error: 'Invalid request signature' 
-        }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-
-      // Handle Discord PING (type 1)
-      if (body.type === 1) {
-        return new Response(JSON.stringify({ type: 1 }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-
-      // Handle slash commands (type 2)
-      if (body.type === 2) {
-        try {
-          const responseData = handleCommand(body);
-          return new Response(JSON.stringify({
-            type: 4,
-            data: responseData
-          }), {
-            headers: { 'Content-Type': 'application/json' }
-          });
-        } catch (error) {
-          console.error('Command error:', error);
-          return new Response(JSON.stringify({
-            type: 4,
-            data: { content: '❌ Đã xảy ra lỗi khi xử lý lệnh!' }
-          }), {
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
-      }
-
-      return new Response(JSON.stringify({ 
-        error: 'Unknown interaction type' 
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    return new Response('404 Not Found', { status: 404 });
-  }
-};
+client.login(process.env.TOKEN).catch(err => {
+  console.error("❌ Không thể login bot:", err);
+  process.exit(1);
+});
