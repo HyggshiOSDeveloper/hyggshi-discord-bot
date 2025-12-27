@@ -3,42 +3,64 @@
 // Dev: Nguyễn Minh Phúc
 
 // ==== CONFIG ====
-const DISCORD_PUBLIC_KEY = 'YOUR_DISCORD_PUBLIC_KEY_HERE';
 const BOT_START_TIME = Date.now();
 
-// ==== VERIFY DISCORD SIGNATURE ====
+// ==== VERIFY DISCORD SIGNATURE (Ed25519) ====
 async function verifyDiscordRequest(request, publicKey) {
   const signature = request.headers.get('x-signature-ed25519');
   const timestamp = request.headers.get('x-signature-timestamp');
-  const body = await request.text();
+  const body = await request.clone().text();
 
-  if (!signature || !timestamp) return { isValid: false };
+  if (!signature || !timestamp || !publicKey) {
+    return { isValid: false, body: null };
+  }
 
-  // Sử dụng Web Crypto API thay vì tweetnacl
-  const isValid = await verifySignature(signature, timestamp + body, publicKey);
-
-  return { isValid, body: JSON.parse(body) };
+  try {
+    const isValid = await verifyEd25519(
+      signature,
+      timestamp + body,
+      publicKey
+    );
+    
+    return { 
+      isValid, 
+      body: isValid ? JSON.parse(body) : null 
+    };
+  } catch (err) {
+    console.error('Verification error:', err);
+    return { isValid: false, body: null };
+  }
 }
 
-async function verifySignature(signature, message, publicKey) {
+// Ed25519 verification using Web Crypto API
+async function verifyEd25519(signature, message, publicKey) {
+  const encoder = new TextEncoder();
+  
   const key = await crypto.subtle.importKey(
     'raw',
-    hexToUint8Array(publicKey),
-    { name: 'NODE-ED25519', namedCurve: 'NODE-ED25519' },
+    hexToBytes(publicKey),
+    {
+      name: 'Ed25519',
+      namedCurve: 'Ed25519'
+    },
     false,
     ['verify']
   );
-  
+
   return await crypto.subtle.verify(
-    'NODE-ED25519',
+    'Ed25519',
     key,
-    hexToUint8Array(signature),
-    new TextEncoder().encode(message)
+    hexToBytes(signature),
+    encoder.encode(message)
   );
 }
 
-function hexToUint8Array(hex) {
-  return new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes;
 }
 
 // ==== COMMANDS DATA ====
@@ -135,14 +157,14 @@ function handleCommand(interaction) {
       };
 
     case 'user':
-      const user = member.user;
+      const user = member?.user || interaction.user;
       return {
         embeds: [{
           title: '🧑‍💻 Thông tin của bạn',
           fields: [
-            { name: 'Username', value: `${user.username}`, inline: true },
+            { name: 'Username', value: user.username, inline: true },
             { name: 'ID', value: user.id, inline: true },
-            { name: 'Avatar', value: '[Xem avatar](https://cdn.discordapp.com/avatars/' + user.id + '/' + user.avatar + '.png)', inline: false }
+            { name: 'Avatar', value: `[Xem avatar](https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png)`, inline: false }
           ],
           thumbnail: { url: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` },
           color: 0x5865f2
@@ -150,7 +172,7 @@ function handleCommand(interaction) {
       };
 
     case 'members':
-      return { content: '👥 Lệnh này cần quyền truy cập guild. Đang cập nhật...' };
+      return { content: '👥 Thông tin thành viên đang được cập nhật...' };
 
     case 'botinfo':
       return {
@@ -172,7 +194,7 @@ function handleCommand(interaction) {
       };
 
     case 'say':
-      const message = data.options.find(opt => opt.name === 'message')?.value;
+      const message = data.options?.find(opt => opt.name === 'message')?.value;
       return { content: message || '(Không có tin nhắn)' };
 
     case 'roll':
@@ -188,7 +210,7 @@ function handleCommand(interaction) {
 
     case 'avatar':
       const target = data.options?.find(opt => opt.name === 'target');
-      const targetUser = target ? interaction.data.resolved.users[target.value] : member.user;
+      const targetUser = target ? interaction.data.resolved.users[target.value] : (member?.user || interaction.user);
       return {
         embeds: [{
           title: `🖼️ Avatar của ${targetUser.username}`,
@@ -203,17 +225,40 @@ function handleCommand(interaction) {
         return { content: '🤗 Bạn đã tự ôm mình rồi đó... dễ thương quá!' };
       }
       const hugUser = interaction.data.resolved.users[hugTarget.value];
-      return { content: `🤗 <@${member.user.id}> đã ôm <@${hugUser.id}>! 💕` };
+      const huggerUser = member?.user || interaction.user;
+      return { content: `🤗 <@${huggerUser.id}> đã ôm <@${hugUser.id}>! 💕` };
 
     default:
       return { content: '❌ Lệnh không tồn tại!' };
   }
 }
 
+// ==== JSON RESPONSE HELPER ====
+function jsonResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    }
+  });
+}
+
 // ==== MAIN WORKER ====
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    // CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': '*'
+        }
+      });
+    }
 
     // Health check endpoints
     if (url.pathname === '/') {
@@ -223,48 +268,54 @@ export default {
     }
 
     if (url.pathname === '/ping') {
-      return new Response(JSON.stringify({ 
+      return jsonResponse({ 
         status: 'ok', 
         timestamp: Date.now(),
         platform: 'Cloudflare Workers'
-      }), {
-        headers: { 'Content-Type': 'application/json' }
       });
     }
 
     if (url.pathname === '/commands') {
-      return new Response(JSON.stringify(COMMANDS, null, 2), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return jsonResponse(COMMANDS);
     }
 
     // Discord interactions endpoint
     if (url.pathname === '/interactions' && request.method === 'POST') {
-      const { isValid, body } = await verifyDiscordRequest(request, env.DISCORD_PUBLIC_KEY || DISCORD_PUBLIC_KEY);
+      const publicKey = env.DISCORD_PUBLIC_KEY;
+      
+      if (!publicKey) {
+        return jsonResponse({ error: 'DISCORD_PUBLIC_KEY not configured' }, 500);
+      }
+
+      const { isValid, body } = await verifyDiscordRequest(request, publicKey);
       
       if (!isValid) {
-        return new Response('Invalid request signature', { status: 401 });
+        return jsonResponse({ error: 'Invalid request signature' }, 401);
       }
 
       // Handle Discord PING
       if (body.type === 1) {
-        return new Response(JSON.stringify({ type: 1 }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ type: 1 });
       }
 
       // Handle slash commands
       if (body.type === 2) {
-        const responseData = handleCommand(body);
-        return new Response(JSON.stringify({
-          type: 4,
-          data: responseData
-        }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
+        try {
+          const responseData = handleCommand(body);
+          return jsonResponse({
+            type: 4,
+            data: responseData
+          });
+        } catch (error) {
+          console.error('Command error:', error);
+          return jsonResponse({
+            type: 4,
+            data: { content: '❌ Đã xảy ra lỗi khi xử lý lệnh!' }
+          });
+        }
       }
 
-      return new Response('Unknown interaction type', { status: 400 });
+      return jsonResponse({ error: 'Unknown interaction type' }, 400);
     }
 
     return new Response('404 Not Found', { status: 404 });
