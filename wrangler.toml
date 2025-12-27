@@ -1,0 +1,14 @@
+name = "hyggshi-discord-bot"
+main = "index.js"
+compatibility_date = "2024-12-27"
+
+# Environment Variables
+[vars]
+BOT_VERSION = "2.0.0"
+
+# Build config
+[build]
+command = ""
+
+[build.upload]
+format = "service-worker"
