@@ -1,0 +1,8 @@
+{
+  "name": "hyggshi-discord-bot",
+  "main": "index.js",
+  "compatibility_date": "2024-12-27",
+  "vars": {
+    "BOT_VERSION": "2.0.0"
+  }
+}
