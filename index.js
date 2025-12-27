@@ -2,27 +2,39 @@
 // Phiên bản: 2.0.0 for Cloudflare
 // Dev: Nguyễn Minh Phúc
 
-import nacl from 'tweetnacl';
-
 // ==== CONFIG ====
 const DISCORD_PUBLIC_KEY = 'YOUR_DISCORD_PUBLIC_KEY_HERE';
 const BOT_START_TIME = Date.now();
 
 // ==== VERIFY DISCORD SIGNATURE ====
-async function verifyDiscordRequest(request) {
+async function verifyDiscordRequest(request, publicKey) {
   const signature = request.headers.get('x-signature-ed25519');
   const timestamp = request.headers.get('x-signature-timestamp');
   const body = await request.text();
 
   if (!signature || !timestamp) return { isValid: false };
 
-  const isValid = nacl.sign.detached.verify(
-    new TextEncoder().encode(timestamp + body),
-    hexToUint8Array(signature),
-    hexToUint8Array(DISCORD_PUBLIC_KEY)
-  );
+  // Sử dụng Web Crypto API thay vì tweetnacl
+  const isValid = await verifySignature(signature, timestamp + body, publicKey);
 
   return { isValid, body: JSON.parse(body) };
+}
+
+async function verifySignature(signature, message, publicKey) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    hexToUint8Array(publicKey),
+    { name: 'NODE-ED25519', namedCurve: 'NODE-ED25519' },
+    false,
+    ['verify']
+  );
+  
+  return await crypto.subtle.verify(
+    'NODE-ED25519',
+    key,
+    hexToUint8Array(signature),
+    new TextEncoder().encode(message)
+  );
 }
 
 function hexToUint8Array(hex) {
@@ -228,7 +240,7 @@ export default {
 
     // Discord interactions endpoint
     if (url.pathname === '/interactions' && request.method === 'POST') {
-      const { isValid, body } = await verifyDiscordRequest(request);
+      const { isValid, body } = await verifyDiscordRequest(request, env.DISCORD_PUBLIC_KEY || DISCORD_PUBLIC_KEY);
       
       if (!isValid) {
         return new Response('Invalid request signature', { status: 401 });
