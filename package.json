@@ -1,8 +1,27 @@
 {
-  "name": "hyggshi-discord-bot",
-  "version": "2.1.0",
+  "name": "hyggshi-discord-bot-cf",
+  "version": "2.0.0",
+  "description": "Hyggshi OS Discord Bot - Cloudflare Workers Edition",
+  "main": "src/index.js",
   "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "register": "node scripts/register-commands.js",
+    "tail": "wrangler tail"
+  },
+  "keywords": ["discord", "bot", "cloudflare", "workers"],
+  "author": "Nguyễn Minh Phúc",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.82.0"
+  },
   "dependencies": {
-    "tweetnacl": "^1.0.3"
+
+
+
+    "@discordjs/rest": "^2.5.0",
+    "discord-api-types": "^0.38.8",
+    "dotenv": "^16.5.0"
   }
 }
