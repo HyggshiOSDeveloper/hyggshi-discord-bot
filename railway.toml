@@ -1,7 +1,50 @@
+# fly.toml app configuration file
+
+app = "your-discord-bot-name"
+primary_region = "sin"  # Singapore
+
 [build]
-builder = "NIXPACKS"
+  builder = "paketobuildpacks/builder:base"
+  buildpacks = ["ghcr.io/railwayapp/nixpacks:latest"]
 
 [deploy]
-startCommand = "node index.js"
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 10
+  strategy = "immediate"
+
+[env]
+  NODE_ENV = "production"
+
+# Processes configuration
+[processes]
+  app = "node index.js"
+
+# Restart policy tương tự Railway
+[[services]]
+  protocol = "tcp"
+  internal_port = 8080
+
+  # Auto restart on failure (tương tự Railway)
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "10s"
+    grace_period = "30s"
+
+# VM configuration
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpus = 1
+
+# Giữ bot chạy 24/7
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+  max_machines_running = 1
+
+# Health check restart (thay cho restartPolicyMaxRetries)
+[[http_service.concurrency]]
+  type = "connections"
+  hard_limit = 25
+  soft_limit = 20
