@@ -1,16 +1,28 @@
 {
-  "name": "Discord-bot",
+  "name": "hyggshi-discord-bot",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Discord bot running on Cloudflare Workers",
+  "main": "src/worker.js",
+  "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "register": "node src/register.js",
+    "tail": "wrangler tail"
   },
-  "engines": {
-    "node": "22.x"
-  },
+  "keywords": [
+    "discord",
+    "bot",
+    "cloudflare",
+    "workers"
+  ],
+  "author": "",
+  "license": "MIT",
   "dependencies": {
-    "discord.js": "^14.16.3",
-    "express": "^4.19.2",
-    "dotenv": "^16.3.1"
+    "discord-interactions": "^4.1.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.5",
+    "wrangler": "^3.78.12"
   }
 }
