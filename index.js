@@ -26,6 +26,10 @@ app.listen(PORT, () => console.log(`🌐 Web server running on port ${PORT}`));
 // ==== DISCORD CLIENT ====
 var token = process.env.TOKEN || process.env.DISCORD_TOKEN;
 
+if (typeof token === "string") {
+  token = token.trim();
+}
+
 if (!token) {
   console.error("❌ Thiếu TOKEN/DISCORD_TOKEN trong biến môi trường. Bot không thể đăng nhập.");
   process.exit(1);
@@ -226,6 +230,7 @@ client.on("guildMemberAdd", (member) => {
 });
 
 // ==== START BOT ====
+console.log("🔐 Đang đăng nhập bot...");
 client.login(token).catch((error) => {
   console.error("❌ Đăng nhập thất bại. Kiểm tra token và quyền intents.", error);
   process.exit(1);
