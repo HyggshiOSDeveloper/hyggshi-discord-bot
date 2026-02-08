@@ -41,4 +41,3 @@ jobs:
       - name: Check bot start
         run: |
           node -e "console.log('Bot ready to run');"
-
