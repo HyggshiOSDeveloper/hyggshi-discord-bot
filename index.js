@@ -16,7 +16,7 @@ app.get("/", (req, res) => res.send("Bot is alive!"));
 app.get("/ping", (req, res) => res.json({ status: "ok", timestamp: Date.now() }));
 app.get("/status", (req, res) => res.json({
   status: "online",
-  bot: "Minh P Bot",
+  bot: "Hyggshi OS Bot",
   uptime: process.uptime()
 }));
 
@@ -24,17 +24,6 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🌐 Web server running on port ${PORT}`));
 
 // ==== DISCORD CLIENT ====
-var token = process.env.TOKEN || process.env.DISCORD_TOKEN;
-
-if (typeof token === "string") {
-  token = token.trim();
-}
-
-if (!token) {
-  console.error("❌ Thiếu TOKEN/DISCORD_TOKEN trong biến môi trường. Bot không thể đăng nhập.");
-  process.exit(1);
-}
-
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -44,8 +33,7 @@ const client = new Client({
   ]
 });
 
-// ==== READY & REGISTER SLASH COMMANDS ====
-client.once("ready", async () => {
+client.once("ready", () => {
   console.log(`🤖 Bot ready: ${client.user.tag}`);
 
   // Set activity / trạng thái
@@ -53,11 +41,17 @@ client.once("ready", async () => {
     status: "online", // online, idle, dnd, invisible
     activities: [
       {
-        name: "Hyggshi OS Bot | /help", // nội dung hiển thị
-        type: 0 // 0 = Playing, 1 = Streaming, 2 = Listening, 3 = Watching
+        name: "Youtube | /help", // nội dung hiển thị
+        type: 3 // 0 = Playing, 1 = Streaming, 2 = Listening, 3 = Watching
       }
     ]
   });
+});
+
+
+// ==== READY & REGISTER SLASH COMMANDS ====
+client.once("ready", async () => {
+  console.log(`🤖 Bot ready: ${client.user.tag}`);
 
   const commands = [
     new SlashCommandBuilder().setName("ping").setDescription("Kiểm tra độ trễ phản hồi của bot"),
@@ -86,7 +80,7 @@ client.once("ready", async () => {
     new SlashCommandBuilder().setName("uptime").setDescription("Xem thời gian bot chạy")
   ].map(cmd => cmd.toJSON());
 
-  const rest = new REST({ version: "10" }).setToken(token);
+  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
   try {
     console.log("📡 Đăng ký slash commands...");
@@ -95,18 +89,6 @@ client.once("ready", async () => {
   } catch (err) {
     console.error("❌ Lỗi khi đăng ký commands:", err);
   }
-});
-
-client.on("error", (error) => {
-  console.error("❌ Discord client error:", error);
-});
-
-client.on("shardError", (error) => {
-  console.error("❌ Discord shard error:", error);
-});
-
-process.on("unhandledRejection", (error) => {
-  console.error("❌ Unhandled promise rejection:", error);
 });
 
 // ==== SLASH COMMAND HANDLER ====
@@ -125,11 +107,11 @@ client.on("interactionCreate", async interaction => {
   }
 
   if (commandName === "status") {
-    await interaction.reply(`**Bot:** Minh P Bot\n**Trạng thái:** Online\n**Uptime:** ${minutes} phút ${seconds} giây`);
+    await interaction.reply(`**Bot:** Hyggshi OS Bot\n**Trạng thái:** Online\n**Uptime:** ${minutes} phút ${seconds} giây`);
   }
 
   if (commandName === "info") {
-    await interaction.reply(`🤖 **Minh P Bot** là trợ lý Discord hỗ trợ quản lý server và phản hồi tự động.\n❤️ Dev: Nguyễn Minh Phúc`);
+    await interaction.reply(`🤖 **Hyggshi OS Bot** là trợ lý Discord hỗ trợ quản lý server và phản hồi tự động.\n❤️ Dev: Nguyễn Minh Phúc`);
   }
 
   if (commandName === "help") {
@@ -155,7 +137,7 @@ client.on("interactionCreate", async interaction => {
   }
 
   if (commandName === "botinfo") {
-    await interaction.reply(`🤖 **Minh P Bot**\n• Phiên bản: 1.1.2 beta 1\n• Dev: Hyggshi OS\n• Uptime: ${hours} giờ ${minutes} phút ${seconds} giây`);
+    await interaction.reply(`🤖 **Hyggshi OS Bot**\n• Phiên bản: 1.6.9 beta 23\n• Dev: Nguyễn Minh Phúc\n• Uptime: ${hours} giờ ${minutes} phút ${seconds} giây`);
   }
 
   if (commandName === "github") {
@@ -230,8 +212,13 @@ client.on("guildMemberAdd", (member) => {
 });
 
 // ==== START BOT ====
-console.log("🔐 Đang đăng nhập bot...");
-client.login(token).catch((error) => {
-  console.error("❌ Đăng nhập thất bại. Kiểm tra token và quyền intents.", error);
-  process.exit(1);
-});
+client.login(process.env.TOKEN);
+
+
+
+
+
+
+
+
+
