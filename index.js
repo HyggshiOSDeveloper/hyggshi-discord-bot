@@ -25,9 +25,29 @@ app.get("/status", (req, res) => res.json({
   uptime: process.uptime()
 }));
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`🌐 Web server running on port ${PORT}`);
 });
+
+// ================== SELF PING (chống Render sleep) ==================
+const https = require("https");
+const http = require("http");
+
+const RENDER_URL = process.env.RENDER_URL; // vd: https://ten-bot.onrender.com
+
+if (RENDER_URL) {
+  setInterval(() => {
+    const url = new URL(RENDER_URL + "/ping");
+    const mod = url.protocol === "https:" ? https : http;
+    mod.get(url.toString(), (res) => {
+      console.log(`🔁 Self-ping: ${res.statusCode}`);
+    }).on("error", (err) => {
+      console.error("❌ Self-ping lỗi:", err.message);
+    });
+  }, 4 * 60 * 1000); // Ping mỗi 4 phút
+} else {
+  console.warn("⚠️ Chưa set RENDER_URL, bot có thể bị sleep!");
+}
 
 // ================== DISCORD CLIENT ==================
 const client = new Client({
@@ -43,13 +63,11 @@ const client = new Client({
 client.once("ready", async () => {
   console.log(`🤖 Bot ready: ${client.user.tag}`);
 
-  // Presence
   client.user.setPresence({
     status: "online",
     activities: [{ name: "Music | /help", type: 0 }]
   });
 
-  // Slash Commands
   const commands = [
     new SlashCommandBuilder().setName("ping").setDescription("Kiểm tra độ trễ phản hồi"),
     new SlashCommandBuilder().setName("status").setDescription("Trạng thái bot"),
@@ -87,10 +105,7 @@ client.once("ready", async () => {
 
   try {
     console.log("📡 Registering slash commands...");
-    await rest.put(
-      Routes.applicationCommands(APPLICATION_ID),
-      { body: commands }
-    );
+    await rest.put(Routes.applicationCommands(APPLICATION_ID), { body: commands });
     console.log("✅ Slash commands registered!");
   } catch (err) {
     console.error("❌ Slash command error:", err);
@@ -196,5 +211,17 @@ client.on("guildMemberAdd", member => {
   ch.send({ embeds: [embed] });
 });
 
+// ================== ERROR HANDLING ==================
+process.on("unhandledRejection", err => {
+  console.error("❌ Unhandled Rejection:", err);
+});
+
+process.on("uncaughtException", err => {
+  console.error("❌ Uncaught Exception:", err);
+});
+
 // ================== LOGIN ==================
-client.login(TOKEN);
+client.login(TOKEN).catch(err => {
+  console.error("❌ Login thất bại:", err.message);
+  process.exit(1);
+});
