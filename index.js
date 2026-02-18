@@ -49,6 +49,67 @@ if (RENDER_URL) {
   console.warn("⚠️ Chưa set RENDER_URL, bot có thể bị sleep!");
 }
 
+// ================== SAFETY FILTER LAYER ==================
+// I. Kiến trúc hệ thống - 1️⃣ Safety Filter Layer
+// Chặn: Chửi tục | Đe doạ | Bạo lực | Lệnh `say` độc hại
+
+const BLOCKED_WORDS = [
+  // Chửi tục (tiếng Việt)
+  "đụ", "địt", "lồn", "cặc", "dái", "đĩ", "vãi", "cứt", "đéo", "mẹ kiếp",
+  "con chó", "thằng chó", "đồ chó", "đồ điên", "mẹ mày", "bố mày", "má mày",
+  // Chửi tục (tiếng Anh)
+  "fuck", "shit", "bitch", "ass", "damn", "crap", "bastard", "dick", "cock",
+  "pussy", "whore", "slut", "nigga", "nigger", "wtf", "stfu",
+  // Đe doạ & Bạo lực
+  "tao giết mày", "tao đánh mày", "tao chém", "tao bắn", "tao đốt",
+  "i will kill", "i'll kill", "i will hurt", "gonna kill", "kms", "kill yourself",
+  "tự tử", "treo cổ", "nhảy lầu", "uống thuốc ngủ",
+  // Phân biệt chủng tộc / thù ghét
+  "hate you", "die", "go die", "chết đi", "mày chết đi"
+];
+
+/**
+ * Kiểm tra nội dung có vi phạm không
+ * @param {string} text - Nội dung cần kiểm tra
+ * @returns {{ blocked: boolean, matched: string|null }}
+ */
+function safetyCheck(text) {
+  if (!text) return { blocked: false, matched: null };
+  const lower = text.toLowerCase();
+  for (const word of BLOCKED_WORDS) {
+    if (lower.includes(word.toLowerCase())) {
+      return { blocked: true, matched: word };
+    }
+  }
+  return { blocked: false, matched: null };
+}
+
+/**
+ * Gửi cảnh báo khi phát hiện vi phạm
+ * @param {import("discord.js").Message|import("discord.js").CommandInteraction} target
+ * @param {string} matched - Từ vi phạm
+ * @param {"message"|"command"} type
+ */
+async function sendSafetyWarning(target, matched, type = "message") {
+  const embed = new EmbedBuilder()
+    .setTitle("🛡️ Safety Filter — Nội dung bị chặn")
+    .setDescription(
+      `Nội dung của bạn vi phạm quy tắc cộng đồng và đã bị hệ thống chặn.\n\n` +
+      `> **Lý do:** Chứa từ ngữ không phù hợp\n` +
+      `> **Từ phát hiện:** ||\`${matched}\`||\n\n` +
+      `Vui lòng giữ thái độ lịch sự. Tiếp tục vi phạm có thể bị xử phạt.`
+    )
+    .setColor(0xff3333)
+    .setFooter({ text: "Hyggshi OS Bot • Safety Filter Layer" })
+    .setTimestamp();
+
+  if (type === "message") {
+    await target.reply({ embeds: [embed] }).catch(() => {});
+  } else {
+    await target.reply({ embeds: [embed], ephemeral: true }).catch(() => {});
+  }
+}
+
 // ================== DISCORD CLIENT ==================
 const client = new Client({
   intents: [
@@ -153,8 +214,15 @@ client.on("interactionCreate", async interaction => {
   if (commandName === "github")
     return interaction.reply("🔗 https://github.com/HyggshiOSDeveloper/Hyggshi-OS-project-center");
 
-  if (commandName === "say")
-    return interaction.reply(interaction.options.getString("message"));
+  if (commandName === "say") {
+    const sayMsg = interaction.options.getString("message");
+    const sayCheck = safetyCheck(sayMsg);
+    if (sayCheck.blocked) {
+      console.log(`🛡️ [Safety] /say bị chặn bởi ${interaction.user.tag}: "${sayMsg}"`);
+      return sendSafetyWarning(interaction, sayCheck.matched, "command");
+    }
+    return interaction.reply(sayMsg);
+  }
 
   if (commandName === "roll")
     return interaction.reply(`🎲 ${Math.floor(Math.random() * 100) + 1}`);
@@ -184,8 +252,18 @@ client.on("interactionCreate", async interaction => {
 });
 
 // ================== AUTO CHAT ==================
-client.on("messageCreate", msg => {
+client.on("messageCreate", async msg => {
   if (msg.author.bot) return;
+
+  // 🛡️ Safety Filter — kiểm tra mọi tin nhắn
+  const check = safetyCheck(msg.content);
+  if (check.blocked) {
+    console.log(`🛡️ [Safety] Tin nhắn bị chặn từ ${msg.author.tag}: "${msg.content}"`);
+    await sendSafetyWarning(msg, check.matched, "message");
+    try { await msg.delete(); } catch (_) {} // Xoá tin nhắn vi phạm nếu có quyền
+    return;
+  }
+
   if (["hi", "hello", "xin chào"].includes(msg.content.toLowerCase())) {
     msg.reply("👋 Chào bạn!");
   }
