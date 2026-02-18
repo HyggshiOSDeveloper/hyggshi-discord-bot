@@ -110,6 +110,184 @@ async function sendSafetyWarning(target, matched, type = "message") {
   }
 }
 
+// ================== CALM MODE ==================
+// I. Kiến trúc hệ thống - 2️⃣ Calm Mode
+// Nếu chat quá nóng → Bot chuyển sang chế độ nghiêm túc 5 phút
+
+const CALM_MODE_DURATION = 5 * 60 * 1000; // 5 phút
+const CALM_TRIGGER_COUNT = 3;              // Vi phạm để kích hoạt
+const CALM_WINDOW_MS     = 60 * 1000;     // Cửa sổ đếm vi phạm: 1 phút
+const CALM_WARN_COOLDOWN = 15 * 1000;     // Cooldown nhắc nhở "calm mode" mỗi user: 15 giây
+
+/**
+ * State per guild:
+ *   violations   — timestamps vi phạm gần đây
+ *   activatedAt  — thời điểm bật (null = tắt)
+ *   timer        — auto-off timer
+ *   warnCooldown — Map<userId, lastWarnTimestamp> để tránh spam nhắc nhở
+ *   slowMode     — Map<userId, lastMessageTimestamp> để giới hạn tốc độ nhắn
+ */
+const calmState = new Map();
+
+function getCalmState(guildId) {
+  if (!calmState.has(guildId)) {
+    calmState.set(guildId, {
+      violations:   [],
+      activatedAt:  null,
+      timer:        null,
+      warnCooldown: new Map(),
+      slowMode:     new Map()
+    });
+  }
+  return calmState.get(guildId);
+}
+
+/** Calm Mode có đang bật không? */
+function isCalmMode(guildId) {
+  return getCalmState(guildId).activatedAt !== null;
+}
+
+/** Số giây còn lại của Calm Mode */
+function calmModeRemaining(guildId) {
+  const state = getCalmState(guildId);
+  if (!state.activatedAt) return 0;
+  return Math.max(0, Math.ceil((CALM_MODE_DURATION - (Date.now() - state.activatedAt)) / 1000));
+}
+
+/** Bật Calm Mode — gửi thông báo + đặt timer tắt */
+async function activateCalmMode(guildId, channel) {
+  const state = getCalmState(guildId);
+  if (state.activatedAt) return; // Đã bật rồi
+
+  state.activatedAt = Date.now();
+  state.violations  = [];
+  state.warnCooldown.clear();
+  state.slowMode.clear();
+  console.log(`[Calm Mode] 🔴 Kích hoạt tại guild ${guildId}`);
+
+  // Gửi thông báo BẬT
+  const onEmbed = new EmbedBuilder()
+    .setTitle("🧘 Calm Mode — Đã kích hoạt")
+    .setDescription(
+      `⚠️ Phát hiện **${CALM_TRIGGER_COUNT} vi phạm** liên tiếp trong vòng 1 phút!\n\n` +
+      `> 🔴 Bot chuyển sang **chế độ nghiêm túc** trong **5 phút**\n` +
+      `> 🗑️ Mọi tin nhắn vi phạm sẽ bị xoá **ngay lập tức**\n` +
+      `> 🐢 Tin nhắn quá nhanh (< 5 giây) sẽ bị cảnh báo slow mode\n` +
+      `> 🙏 Vui lòng giữ thái độ bình tĩnh và lịch sự`
+    )
+    .setColor(0xff8c00)
+    .setThumbnail("https://cdn.discordapp.com/emojis/1234567890.png") // tuỳ chỉnh
+    .setFooter({ text: "Calm Mode tự tắt sau 5 phút • Hyggshi OS Bot" })
+    .setTimestamp();
+
+  await channel.send({ embeds: [onEmbed] }).catch(() => {});
+
+  // Auto-tắt sau 5 phút
+  if (state.timer) clearTimeout(state.timer);
+  state.timer = setTimeout(async () => {
+    state.activatedAt = null;
+    state.timer       = null;
+    state.violations  = [];
+    state.warnCooldown.clear();
+    state.slowMode.clear();
+    console.log(`[Calm Mode] 🟢 Tắt tại guild ${guildId}`);
+
+    const offEmbed = new EmbedBuilder()
+      .setTitle("✅ Calm Mode — Đã tắt")
+      .setDescription(
+        `Chế độ nghiêm túc đã kết thúc sau **5 phút**.\n` +
+        `Cảm ơn mọi người đã giữ bình tĩnh và lịch sự! 😊🎉`
+      )
+      .setColor(0x00c851)
+      .setTimestamp();
+
+    await channel.send({ embeds: [offEmbed] }).catch(() => {});
+  }, CALM_MODE_DURATION);
+}
+
+/** Ghi nhận vi phạm và kiểm tra có nên bật Calm Mode không */
+async function recordViolation(guildId, channel) {
+  const state = getCalmState(guildId);
+  const now   = Date.now();
+
+  state.violations = state.violations.filter(t => now - t < CALM_WINDOW_MS);
+  state.violations.push(now);
+
+  console.log(`[Calm Mode] Guild ${guildId} — ${state.violations.length}/${CALM_TRIGGER_COUNT} vi phạm`);
+
+  if (state.violations.length >= CALM_TRIGGER_COUNT && !state.activatedAt) {
+    await activateCalmMode(guildId, channel);
+  }
+}
+
+/**
+ * Xử lý tin nhắn trong Calm Mode:
+ * - Slow mode: xoá tin nếu nhắn quá nhanh (< 5 giây)
+ * - Nhắc nhở: gửi embed nhắc bình tĩnh (có cooldown 15 giây/user)
+ * @returns {boolean} true nếu tin nhắn đã bị can thiệp (xoá)
+ */
+async function handleCalmModeMessage(msg) {
+  if (!msg.guild || !isCalmMode(msg.guild.id)) return false;
+
+  const state    = getCalmState(msg.guild.id);
+  const now      = Date.now();
+  const userId   = msg.author.id;
+  const remaining = calmModeRemaining(msg.guild.id);
+
+  // --- Slow mode: giới hạn 1 tin / 5 giây ---
+  const lastMsg = state.slowMode.get(userId) || 0;
+  if (now - lastMsg < 5000) {
+    try { await msg.delete(); } catch (_) {}
+    // Chỉ gửi cảnh báo slow mode nếu chưa gửi gần đây
+    const lastWarn = state.warnCooldown.get(userId + "_slow") || 0;
+    if (now - lastWarn > CALM_WARN_COOLDOWN) {
+      state.warnCooldown.set(userId + "_slow", now);
+      await msg.channel.send({
+        content: `${msg.author}`,
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("🐢 Slow Mode")
+            .setDescription(
+              `Bạn đang nhắn quá nhanh!\n` +
+              `> Calm Mode đang hoạt động — vui lòng chờ **5 giây** giữa mỗi tin nhắn.\n` +
+              `> Còn **${remaining} giây** nữa Calm Mode sẽ tắt.`
+            )
+            .setColor(0xffa500)
+            .setFooter({ text: "Hyggshi OS Bot • Calm Mode" })
+        ]
+      }).catch(() => {});
+    }
+    return true; // Đã can thiệp (xoá)
+  }
+  state.slowMode.set(userId, now);
+
+  // --- Nhắc nhở nếu tin nhắn "nóng" (nhiều ! hoặc caps) ---
+  const isHot = (msg.content.includes("!") || msg.content === msg.content.toUpperCase())
+    && msg.content.length > 3;
+
+  if (isHot) {
+    const lastWarn = state.warnCooldown.get(userId) || 0;
+    if (now - lastWarn > CALM_WARN_COOLDOWN) {
+      state.warnCooldown.set(userId, now);
+      await msg.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("🧘 Calm Mode đang hoạt động")
+            .setDescription(
+              `Server đang ở chế độ nghiêm túc.\n` +
+              `> Hãy giữ bình tĩnh và trao đổi lịch sự nhé.\n` +
+              `> Còn **${remaining} giây** nữa sẽ kết thúc. 🙏`
+            )
+            .setColor(0xff8c00)
+            .setFooter({ text: "Hyggshi OS Bot • Calm Mode" })
+        ]
+      }).catch(() => {});
+    }
+  }
+
+  return false;
+}
+
 // ================== DISCORD CLIENT ==================
 const client = new Client({
   intents: [
@@ -162,7 +340,8 @@ client.once("ready", async () => {
       .setDescription("Ôm ai đó")
       .addUserOption(o =>
         o.setName("target").setDescription("Người muốn ôm")
-      )
+      ),
+    new SlashCommandBuilder().setName("calmstatus").setDescription("Kiểm tra trạng thái Calm Mode")
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -287,6 +466,28 @@ client.on("interactionCreate", async interaction => {
     const t = interaction.options.getUser("target") || interaction.user;
     return interaction.reply(`🤗 ${interaction.user} ôm ${t}`);
   }
+
+  if (commandName === "calmstatus") {
+    const guildId = interaction.guild?.id;
+    if (!guildId) return interaction.reply({ content: "⚠️ Lệnh này chỉ dùng trong server!", ephemeral: true });
+
+    const active    = isCalmMode(guildId);
+    const remaining = calmModeRemaining(guildId);
+    const state     = getCalmState(guildId);
+
+    const embed = new EmbedBuilder()
+      .setTitle("🧘 Calm Mode — Trạng thái")
+      .addFields(
+        { name: "Trạng thái",       value: active ? "🔴 Đang hoạt động" : "🟢 Tắt",                       inline: true },
+        { name: "Thời gian còn lại", value: active ? `${remaining} giây` : "—",                            inline: true },
+        { name: "Vi phạm gần đây",   value: `${state.violations.length}/${CALM_TRIGGER_COUNT} (trong 1 phút)`, inline: true }
+      )
+      .setColor(active ? 0xff8c00 : 0x00c851)
+      .setFooter({ text: "Calm Mode kích hoạt khi có 3 vi phạm trong 1 phút • Hyggshi OS Bot" })
+      .setTimestamp();
+
+    return interaction.reply({ embeds: [embed], ephemeral: true });
+  }
 });
 
 // ================== AUTO CHAT ==================
@@ -298,9 +499,16 @@ client.on("messageCreate", async msg => {
   if (check.blocked) {
     console.log(`🛡️ [Safety] Tin nhắn bị chặn từ ${msg.author.tag}: "${msg.content}"`);
     await sendSafetyWarning(msg, check.matched, "message");
-    try { await msg.delete(); } catch (_) {} // Xoá tin nhắn vi phạm nếu có quyền
+    try { await msg.delete(); } catch (_) {}
+
+    // 🧘 Calm Mode — ghi nhận vi phạm (kể cả khi đang calm mode để reset timer)
+    if (msg.guild) await recordViolation(msg.guild.id, msg.channel);
     return;
   }
+
+  // 🧘 Calm Mode — xử lý slow mode & nhắc nhở
+  const wasHandled = await handleCalmModeMessage(msg);
+  if (wasHandled) return; // Tin nhắn đã bị xoá (slow mode)
 
   if (["hi", "hello", "xin chào"].includes(msg.content.toLowerCase())) {
     msg.reply("👋 Chào bạn!");
