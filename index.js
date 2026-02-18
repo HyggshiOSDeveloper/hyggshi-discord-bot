@@ -141,9 +141,12 @@ client.once("ready", async () => {
     new SlashCommandBuilder().setName("github").setDescription("GitHub dự án"),
     new SlashCommandBuilder()
       .setName("say")
-      .setDescription("Bot nói lại")
+      .setDescription("Bot nói lại (hỗ trợ kèm ảnh)")
       .addStringOption(o =>
-        o.setName("message").setDescription("Nội dung").setRequired(true)
+        o.setName("message").setDescription("Nội dung").setRequired(false)
+      )
+      .addAttachmentOption(o =>
+        o.setName("image").setDescription("Ảnh đính kèm (tuỳ chọn)").setRequired(false)
       ),
     new SlashCommandBuilder().setName("roll").setDescription("Tung xúc xắc 1-100"),
     new SlashCommandBuilder().setName("flip").setDescription("Tung đồng xu"),
@@ -215,13 +218,48 @@ client.on("interactionCreate", async interaction => {
     return interaction.reply("🔗 https://github.com/HyggshiOSDeveloper/Hyggshi-OS-project-center");
 
   if (commandName === "say") {
-    const sayMsg = interaction.options.getString("message");
-    const sayCheck = safetyCheck(sayMsg);
-    if (sayCheck.blocked) {
-      console.log(`🛡️ [Safety] /say bị chặn bởi ${interaction.user.tag}: "${sayMsg}"`);
-      return sendSafetyWarning(interaction, sayCheck.matched, "command");
+    const sayMsg = interaction.options.getString("message") || "";
+    const sayImage = interaction.options.getAttachment("image");
+
+    // Phải có ít nhất message hoặc ảnh
+    if (!sayMsg && !sayImage) {
+      return interaction.reply({ content: "⚠️ Bạn cần nhập nội dung hoặc đính kèm ảnh!", ephemeral: true });
     }
-    return interaction.reply(sayMsg);
+
+    // Safety check nội dung text
+    if (sayMsg) {
+      const sayCheck = safetyCheck(sayMsg);
+      if (sayCheck.blocked) {
+        console.log(`🛡️ [Safety] /say bị chặn bởi ${interaction.user.tag}: "${sayMsg}"`);
+        return sendSafetyWarning(interaction, sayCheck.matched, "command");
+      }
+    }
+
+    // Safety check: chỉ cho phép ảnh (image/*), chặn file lạ
+    if (sayImage) {
+      const allowedTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+      if (!allowedTypes.includes(sayImage.contentType)) {
+        return interaction.reply({
+          content: "🛡️ Chỉ được đính kèm file ảnh (PNG, JPG, GIF, WEBP)!",
+          ephemeral: true
+        });
+      }
+    }
+
+    // Xây dựng reply
+    const replyPayload = {};
+
+    if (sayMsg) replyPayload.content = sayMsg;
+
+    if (sayImage) {
+      replyPayload.embeds = [
+        new EmbedBuilder()
+          .setImage(sayImage.url)
+          .setColor(0x5865f2)
+      ];
+    }
+
+    return interaction.reply(replyPayload);
   }
 
   if (commandName === "roll")
