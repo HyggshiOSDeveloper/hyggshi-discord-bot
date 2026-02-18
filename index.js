@@ -106,7 +106,8 @@ async function sendSafetyWarning(target, matched, type = "message") {
   if (type === "message") {
     await target.reply({ embeds: [embed] }).catch(() => {});
   } else {
-    await target.reply({ embeds: [embed], ephemeral: true }).catch(() => {});
+    // Interaction đã được defer → dùng editReply
+    await target.editReply({ embeds: [embed] }).catch(() => {});
   }
 }
 
@@ -365,36 +366,59 @@ client.on("interactionCreate", async interaction => {
   const m = Math.floor((uptime % 3600) / 60);
   const s = Math.floor(uptime % 60);
 
+  // ⚡ Defer ngay lập tức để tránh timeout 3 giây của Discord
+  // Với các lệnh nhanh, editReply() sẽ thay thế "đang xử lý..."
+  try {
+    await interaction.deferReply({ ephemeral: false });
+  } catch (e) {
+    // Nếu defer lỗi (VD: đã timeout), bỏ qua lệnh này hoàn toàn
+    console.warn(`⚠️ [Defer] Không thể defer interaction "${commandName}": ${e.message}`);
+    return;
+  }
+
+  // Helper: editReply thay vì reply (vì đã defer)
+  const send = (payload) => {
+    if (typeof payload === "string") return interaction.editReply({ content: payload });
+    return interaction.editReply(payload);
+  };
+  const sendEphemeral = (payload) => {
+    // Sau khi defer public, không thể đổi ephemeral — gửi followUp thay
+    if (typeof payload === "string") return interaction.followUp({ content: payload, ephemeral: true });
+    return interaction.followUp({ ...payload, ephemeral: true });
+  };
+
+  try {
+
   if (commandName === "ping")
-    return interaction.reply(`🏓 Ping: ${Date.now() - interaction.createdTimestamp} ms`);
+    return send(`🏓 Pong! 🏓 Ping: ${Date.now() - interaction.createdTimestamp} ms`);
 
   if (commandName === "status")
-    return interaction.reply(`🟢 Online\n⏱️ ${m} phút ${s} giây`);
+    return send(`🟢 Online\n⏱️ ${m} phút ${s} giây`);
 
   if (commandName === "info")
-    return interaction.reply("🤖 **Hyggshi OS Bot**\nDev: Nguyễn Minh Phúc");
+    return send("🤖 **Hyggshi OS Bot**\nDev: Nguyễn Minh Phúc");
 
   if (commandName === "help")
-    return interaction.reply("📋 `/ping /status /info /help /server /user /avatar /hug /roll /flip /uptime`");
+    return send("📋 `/ping /status /info /help /server /user /avatar /hug /roll /flip /uptime /calmstatus`");
 
   if (commandName === "server") {
     const g = interaction.guild;
-    return interaction.reply(`🏠 ${g.name}\n👥 ${g.memberCount}`);
+    return send(`🏠 ${g.name}\n👥 ${g.memberCount}`);
   }
 
   if (commandName === "user") {
     const u = interaction.user;
-    return interaction.reply(`👤 ${u.tag}\n🆔 ${u.id}`);
+    return send(`👤 ${u.tag}\n🆔 ${u.id}`);
   }
 
   if (commandName === "members")
-    return interaction.reply(`👥 ${interaction.guild.memberCount}`);
+    return send(`👥 ${interaction.guild.memberCount}`);
 
   if (commandName === "botinfo")
-    return interaction.reply(`🤖 Hyggshi OS Bot\n⏱️ ${h}h ${m}m ${s}s`);
+    return send(`🤖 Hyggshi OS Bot\n⏱️ ${h}h ${m}m ${s}s`);
 
   if (commandName === "github")
-    return interaction.reply("🔗 https://github.com/HyggshiOSDeveloper/Hyggshi-OS-project-center");
+    return send("🔗 https://github.com/HyggshiOSDeveloper/Hyggshi-OS-project-center");
 
   if (commandName === "say") {
     const sayMsg = interaction.options.getString("message") || "";
@@ -402,7 +426,7 @@ client.on("interactionCreate", async interaction => {
 
     // Phải có ít nhất message hoặc ảnh
     if (!sayMsg && !sayImage) {
-      return interaction.reply({ content: "⚠️ Bạn cần nhập nội dung hoặc đính kèm ảnh!", ephemeral: true });
+      return sendEphemeral("⚠️ Bạn cần nhập nội dung hoặc đính kèm ảnh!");
     }
 
     // Safety check nội dung text
@@ -418,10 +442,7 @@ client.on("interactionCreate", async interaction => {
     if (sayImage) {
       const allowedTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"];
       if (!allowedTypes.includes(sayImage.contentType)) {
-        return interaction.reply({
-          content: "🛡️ Chỉ được đính kèm file ảnh (PNG, JPG, GIF, WEBP)!",
-          ephemeral: true
-        });
+        return sendEphemeral("🛡️ Chỉ được đính kèm file ảnh (PNG, JPG, GIF, WEBP)!");
       }
     }
 
@@ -438,21 +459,21 @@ client.on("interactionCreate", async interaction => {
       ];
     }
 
-    return interaction.reply(replyPayload);
+    return send(replyPayload);
   }
 
   if (commandName === "roll")
-    return interaction.reply(`🎲 ${Math.floor(Math.random() * 100) + 1}`);
+    return send(`🎲 ${Math.floor(Math.random() * 100) + 1}`);
 
   if (commandName === "flip")
-    return interaction.reply(`💰 ${Math.random() < 0.5 ? "Heads" : "Tails"}`);
+    return send(`💰 ${Math.random() < 0.5 ? "Heads" : "Tails"}`);
 
   if (commandName === "uptime")
-    return interaction.reply(`🕒 ${h}h ${m}m ${s}s`);
+    return send(`🕒 ${h}h ${m}m ${s}s`);
 
   if (commandName === "avatar") {
     const u = interaction.options.getUser("target") || interaction.user;
-    return interaction.reply({
+    return send({
       embeds: [
         new EmbedBuilder()
           .setTitle(u.tag)
@@ -464,12 +485,12 @@ client.on("interactionCreate", async interaction => {
 
   if (commandName === "hug") {
     const t = interaction.options.getUser("target") || interaction.user;
-    return interaction.reply(`🤗 ${interaction.user} ôm ${t}`);
+    return send(`🤗 ${interaction.user} ôm ${t}`);
   }
 
   if (commandName === "calmstatus") {
     const guildId = interaction.guild?.id;
-    if (!guildId) return interaction.reply({ content: "⚠️ Lệnh này chỉ dùng trong server!", ephemeral: true });
+    if (!guildId) return sendEphemeral("⚠️ Lệnh này chỉ dùng trong server!");
 
     const active    = isCalmMode(guildId);
     const remaining = calmModeRemaining(guildId);
@@ -486,7 +507,17 @@ client.on("interactionCreate", async interaction => {
       .setFooter({ text: "Calm Mode kích hoạt khi có 3 vi phạm trong 1 phút • Hyggshi OS Bot" })
       .setTimestamp();
 
-    return interaction.reply({ embeds: [embed], ephemeral: true });
+    return send({ embeds: [embed] });
+  }
+
+  } catch (err) {
+    // Bắt mọi lỗi trong quá trình xử lý lệnh
+    if (!isIgnorableError(err)) {
+      console.error(`❌ [Slash] Lỗi lệnh /${commandName}:`, err);
+    }
+    try {
+      await interaction.editReply("⚠️ Có lỗi xảy ra khi xử lý lệnh. Vui lòng thử lại.");
+    } catch (_) {}
   }
 });
 
@@ -536,12 +567,34 @@ client.on("guildMemberAdd", member => {
 });
 
 // ================== ERROR HANDLING ==================
+// Danh sách lỗi Discord API không nghiêm trọng — KHÔNG crash bot
+const IGNORABLE_DISCORD_CODES = [
+  10062, // Unknown interaction (bot reply quá chậm, timeout 3s)
+  10008, // Unknown message (tin nhắn đã bị xoá trước khi bot xử lý)
+  50013, // Missing Permissions
+  40060, // Interaction already acknowledged
+];
+
+function isIgnorableError(err) {
+  return err?.code && IGNORABLE_DISCORD_CODES.includes(err.code);
+}
+
 process.on("unhandledRejection", err => {
+  if (isIgnorableError(err)) {
+    console.warn(`⚠️ [Discord] Bỏ qua lỗi nhẹ: [${err.code}] ${err.message}`);
+    return;
+  }
   console.error("❌ Unhandled Rejection:", err);
 });
 
 process.on("uncaughtException", err => {
-  console.error("❌ Uncaught Exception:", err);
+  if (isIgnorableError(err)) {
+    // Lỗi 10062 = interaction timeout — bình thường khi Render khởi động chậm
+    console.warn(`⚠️ [Discord] Bỏ qua uncaughtException nhẹ: [${err.code}] ${err.message}`);
+    return; // KHÔNG exit(1) — giữ bot sống
+  }
+  console.error("❌ Uncaught Exception nghiêm trọng:", err);
+  process.exit(1);
 });
 
 // ================== LOGIN ==================
