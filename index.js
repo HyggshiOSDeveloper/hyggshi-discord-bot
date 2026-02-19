@@ -358,6 +358,11 @@ client.once("ready", async () => {
           .setDescription("Kênh muốn xoá (để trống = kênh hiện tại)")
           .setRequired(false)
       )
+      .addBooleanOption(o =>
+        o.setName("old")
+          .setDescription("Xoá cả tin nhắn cũ hơn 14 ngày? (chậm hơn, xoá từng cái)")
+          .setRequired(false)
+      )
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -531,8 +536,9 @@ client.on("interactionCreate", async interaction => {
       return sendEphemeral("🚫 Bạn không có quyền **Quản lý tin nhắn** để dùng lệnh này!");
     }
 
-    const amount  = interaction.options.getInteger("amount");
-    const target  = interaction.options.getChannel("channel") || interaction.channel;
+    const amount    = interaction.options.getInteger("amount");
+    const target    = interaction.options.getChannel("channel") || interaction.channel;
+    const allowOld  = interaction.options.getBoolean("old") ?? false;
 
     // Kiểm tra bot có quyền trong kênh đích không
     const botMember = interaction.guild.members.me;
@@ -540,43 +546,88 @@ client.on("interactionCreate", async interaction => {
       return sendEphemeral(`🚫 Bot không có quyền **Quản lý tin nhắn** trong <#${target.id}>!`);
     }
 
-    // Discord chỉ bulk delete được tin nhắn < 14 ngày tuổi
-    let deleted = 0;
+    let deleted   = 0;
+    let skipped   = 0;
+    let mode      = "bulk"; // "bulk" | "single"
+
+    const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+
     try {
       const fetched = await target.messages.fetch({ limit: amount });
-      const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
-      const deletable = fetched.filter(m => m.createdTimestamp > twoWeeksAgo);
 
-      if (deletable.size === 0) {
-        return sendEphemeral("⚠️ Không có tin nhắn nào có thể xoá (tin nhắn quá 14 ngày không thể bulk delete).");
+      if (!allowOld) {
+        // ── Chế độ mặc định: bulk delete (chỉ tin < 14 ngày) ──
+        const deletable = fetched.filter(m => m.createdTimestamp > twoWeeksAgo);
+        skipped = fetched.size - deletable.size;
+
+        if (deletable.size === 0) {
+          return sendEphemeral(
+            `⚠️ Tất cả ${fetched.size} tin nhắn đều cũ hơn 14 ngày!
+` +
+            `> Dùng \`old: True\` để xoá từng cái (chậm hơn).`
+          );
+        }
+
+        const result = await target.bulkDelete(deletable, true);
+        deleted = result.size;
+        mode    = "bulk";
+
+      } else {
+        // ── Chế độ old: xoá từng cái, kể cả tin > 14 ngày ──
+        mode = "single";
+
+        // Thông báo tiến trình vì sẽ mất thời gian
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("⏳ Đang xoá tin nhắn cũ...")
+              .setDescription(
+                `Đang xoá **${fetched.size}** tin nhắn trong <#${target.id}> (bao gồm tin cũ hơn 14 ngày).
+` +
+                `> Quá trình này có thể mất vài giây, vui lòng chờ...`
+              )
+              .setColor(0xffa500)
+          ]
+        });
+
+        // Xoá từng tin, delay 500ms/cái để tránh rate limit
+        for (const [, msg] of fetched) {
+          try {
+            await msg.delete();
+            deleted++;
+          } catch (e) {
+            // Có thể đã bị xoá hoặc không có quyền
+            skipped++;
+            console.warn(`[Clear/old] Bỏ qua tin nhắn ${msg.id}: ${e.message}`);
+          }
+          // Delay 600ms giữa mỗi lần xoá để tránh rate limit Discord (5 req/s)
+          await new Promise(r => setTimeout(r, 600));
+        }
       }
 
-      const result = await target.bulkDelete(deletable, true);
-      deleted = result.size;
     } catch (e) {
       console.error("[Clear] Lỗi khi xoá:", e.message);
       return sendEphemeral(`❌ Xoá thất bại: ${e.message}`);
     }
 
-    const embed = new EmbedBuilder()
+    // Embed kết quả
+    const resultEmbed = new EmbedBuilder()
       .setTitle("🗑️ Đã xoá tin nhắn")
       .addFields(
-        { name: "Kênh",        value: `<#${target.id}>`,      inline: true },
-        { name: "Số đã xoá",   value: `${deleted} tin nhắn`,  inline: true },
-        { name: "Thực hiện",   value: `${interaction.user}`,  inline: true }
+        { name: "Kênh",        value: `<#${target.id}>`,                                    inline: true },
+        { name: "Đã xoá",      value: `${deleted} tin nhắn`,                                inline: true },
+        { name: "Bỏ qua",      value: skipped > 0 ? `${skipped} tin` : "Không có",          inline: true },
+        { name: "Chế độ",      value: mode === "bulk" ? "⚡ Bulk (nhanh)" : "🐢 Từng cái (hỗ trợ tin cũ)", inline: true },
+        { name: "Thực hiện",   value: `${interaction.user}`,                                 inline: true }
       )
       .setColor(0xff4444)
       .setFooter({ text: "Hyggshi OS Bot • Clear" })
       .setTimestamp();
 
-    // Gửi kết quả vào kênh hiện tại (ephemeral nếu xoá kênh khác, public nếu xoá kênh này)
-    if (target.id === interaction.channel.id) {
-      return send({ embeds: [embed] });
-    } else {
-      // Gửi thông báo vào kênh đích
-      await target.send({ embeds: [embed] }).catch(() => {});
-      return send({ embeds: [embed] });
+    if (target.id !== interaction.channel.id) {
+      await target.send({ embeds: [resultEmbed] }).catch(() => {});
     }
+    return send({ embeds: [resultEmbed] });
   }
 
   } catch (err) {
