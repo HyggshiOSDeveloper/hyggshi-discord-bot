@@ -342,7 +342,22 @@ client.once("ready", async () => {
       .addUserOption(o =>
         o.setName("target").setDescription("Người muốn ôm")
       ),
-    new SlashCommandBuilder().setName("calmstatus").setDescription("Kiểm tra trạng thái Calm Mode")
+    new SlashCommandBuilder().setName("calmstatus").setDescription("Kiểm tra trạng thái Calm Mode"),
+    new SlashCommandBuilder()
+      .setName("clear")
+      .setDescription("🗑️ Xoá tin nhắn trong kênh")
+      .addIntegerOption(o =>
+        o.setName("amount")
+          .setDescription("Số tin nhắn muốn xoá (1–100)")
+          .setRequired(true)
+          .setMinValue(1)
+          .setMaxValue(100)
+      )
+      .addChannelOption(o =>
+        o.setName("channel")
+          .setDescription("Kênh muốn xoá (để trống = kênh hiện tại)")
+          .setRequired(false)
+      )
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -508,6 +523,60 @@ client.on("interactionCreate", async interaction => {
       .setTimestamp();
 
     return send({ embeds: [embed] });
+  }
+
+  if (commandName === "clear") {
+    // Chỉ cho phép người có quyền Manage Messages
+    if (!interaction.member.permissions.has("ManageMessages")) {
+      return sendEphemeral("🚫 Bạn không có quyền **Quản lý tin nhắn** để dùng lệnh này!");
+    }
+
+    const amount  = interaction.options.getInteger("amount");
+    const target  = interaction.options.getChannel("channel") || interaction.channel;
+
+    // Kiểm tra bot có quyền trong kênh đích không
+    const botMember = interaction.guild.members.me;
+    if (!target.permissionsFor(botMember).has("ManageMessages")) {
+      return sendEphemeral(`🚫 Bot không có quyền **Quản lý tin nhắn** trong <#${target.id}>!`);
+    }
+
+    // Discord chỉ bulk delete được tin nhắn < 14 ngày tuổi
+    let deleted = 0;
+    try {
+      const fetched = await target.messages.fetch({ limit: amount });
+      const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+      const deletable = fetched.filter(m => m.createdTimestamp > twoWeeksAgo);
+
+      if (deletable.size === 0) {
+        return sendEphemeral("⚠️ Không có tin nhắn nào có thể xoá (tin nhắn quá 14 ngày không thể bulk delete).");
+      }
+
+      const result = await target.bulkDelete(deletable, true);
+      deleted = result.size;
+    } catch (e) {
+      console.error("[Clear] Lỗi khi xoá:", e.message);
+      return sendEphemeral(`❌ Xoá thất bại: ${e.message}`);
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle("🗑️ Đã xoá tin nhắn")
+      .addFields(
+        { name: "Kênh",        value: `<#${target.id}>`,      inline: true },
+        { name: "Số đã xoá",   value: `${deleted} tin nhắn`,  inline: true },
+        { name: "Thực hiện",   value: `${interaction.user}`,  inline: true }
+      )
+      .setColor(0xff4444)
+      .setFooter({ text: "Hyggshi OS Bot • Clear" })
+      .setTimestamp();
+
+    // Gửi kết quả vào kênh hiện tại (ephemeral nếu xoá kênh khác, public nếu xoá kênh này)
+    if (target.id === interaction.channel.id) {
+      return send({ embeds: [embed] });
+    } else {
+      // Gửi thông báo vào kênh đích
+      await target.send({ embeds: [embed] }).catch(() => {});
+      return send({ embeds: [embed] });
+    }
   }
 
   } catch (err) {
