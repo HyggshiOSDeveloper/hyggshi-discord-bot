@@ -362,6 +362,26 @@ client.once("ready", async () => {
         o.setName("old")
           .setDescription("Xoá cả tin nhắn cũ hơn 14 ngày? (chậm hơn, xoá từng cái)")
           .setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName("clearimage")
+      .setDescription("🖼️ Xoá tin nhắn chứa ảnh/file trong kênh")
+      .addIntegerOption(o =>
+        o.setName("amount")
+          .setDescription("Số tin nhắn muốn quét để tìm ảnh (1–100)")
+          .setRequired(true)
+          .setMinValue(1)
+          .setMaxValue(100)
+      )
+      .addChannelOption(o =>
+        o.setName("channel")
+          .setDescription("Kênh muốn xoá ảnh (để trống = kênh hiện tại)")
+          .setRequired(false)
+      )
+      .addBooleanOption(o =>
+        o.setName("old")
+          .setDescription("Xoá cả ảnh trong tin nhắn cũ hơn 14 ngày? (chậm hơn)")
+          .setRequired(false)
       )
   ].map(c => c.toJSON());
 
@@ -622,6 +642,124 @@ client.on("interactionCreate", async interaction => {
       )
       .setColor(0xff4444)
       .setFooter({ text: "Hyggshi OS Bot • Clear" })
+      .setTimestamp();
+
+    if (target.id !== interaction.channel.id) {
+      await target.send({ embeds: [resultEmbed] }).catch(() => {});
+    }
+    return send({ embeds: [resultEmbed] });
+  }
+
+  if (commandName === "clearimage") {
+    // Chỉ cho phép người có quyền Manage Messages
+    if (!interaction.member.permissions.has("ManageMessages")) {
+      return sendEphemeral("🚫 Bạn không có quyền **Quản lý tin nhắn** để dùng lệnh này!");
+    }
+
+    const amount   = interaction.options.getInteger("amount");
+    const target   = interaction.options.getChannel("channel") || interaction.channel;
+    const allowOld = interaction.options.getBoolean("old") ?? false;
+
+    // Kiểm tra quyền bot
+    const botMember = interaction.guild.members.me;
+    if (!target.permissionsFor(botMember).has("ManageMessages")) {
+      return sendEphemeral(`🚫 Bot không có quyền **Quản lý tin nhắn** trong <#${target.id}>!`);
+    }
+
+    // Fetch tin nhắn
+    const fetched = await target.messages.fetch({ limit: amount });
+
+    // Lọc chỉ tin nhắn có ảnh hoặc file đính kèm
+    const hasMedia = m =>
+      m.attachments.size > 0 ||
+      m.embeds.some(e => e.image || e.thumbnail || e.type === "image");
+
+    const twoWeeksAgo   = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const mediaMsgs     = fetched.filter(hasMedia);
+    const totalScanned  = fetched.size;
+
+    if (mediaMsgs.size === 0) {
+      return sendEphemeral(
+        `🔍 Đã quét **${totalScanned}** tin nhắn trong <#${target.id}> nhưng **không tìm thấy ảnh/file** nào.`
+      );
+    }
+
+    let deleted = 0;
+    let skipped = 0;
+    let mode    = "bulk";
+
+    // Thông báo tiến trình
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("🔍 Đang tìm và xoá ảnh...")
+          .setDescription(
+            `Tìm thấy **${mediaMsgs.size} tin nhắn có ảnh/file** trong <#${target.id}>.
+` +
+            `> Đang xoá, vui lòng chờ...`
+          )
+          .setColor(0xffa500)
+      ]
+    });
+
+    if (!allowOld) {
+      // ── Bulk delete: chỉ tin < 14 ngày ──
+      mode = "bulk";
+      const deletable = mediaMsgs.filter(m => m.createdTimestamp > twoWeeksAgo);
+      skipped = mediaMsgs.size - deletable.size;
+
+      if (deletable.size === 0) {
+        return send({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("⚠️ Không thể xoá")
+              .setDescription(
+                `Tất cả **${mediaMsgs.size}** tin nhắn có ảnh đều cũ hơn 14 ngày.
+` +
+                `> Dùng \`old: True\` để xoá từng cái.`
+              )
+              .setColor(0xffa500)
+          ]
+        });
+      }
+
+      try {
+        const result = await target.bulkDelete(deletable, true);
+        deleted = result.size;
+      } catch (e) {
+        console.error("[ClearImage/bulk] Lỗi:", e.message);
+        return sendEphemeral(`❌ Xoá thất bại: ${e.message}`);
+      }
+
+    } else {
+      // ── Single delete: xoá từng cái, kể cả tin cũ ──
+      mode = "single";
+      for (const [, msg] of mediaMsgs) {
+        try {
+          await msg.delete();
+          deleted++;
+        } catch (e) {
+          skipped++;
+          console.warn(`[ClearImage/old] Bỏ qua ${msg.id}: ${e.message}`);
+        }
+        await new Promise(r => setTimeout(r, 600)); // tránh rate limit
+      }
+    }
+
+    // Embed kết quả
+    const resultEmbed = new EmbedBuilder()
+      .setTitle("🖼️ Đã xoá ảnh/file")
+      .addFields(
+        { name: "Kênh",         value: `<#${target.id}>`,                                            inline: true },
+        { name: "Đã quét",      value: `${totalScanned} tin nhắn`,                                   inline: true },
+        { name: "Có ảnh/file",  value: `${mediaMsgs.size} tin`,                                      inline: true },
+        { name: "Đã xoá",       value: `${deleted} tin`,                                             inline: true },
+        { name: "Bỏ qua",       value: skipped > 0 ? `${skipped} tin` : "Không có",                  inline: true },
+        { name: "Chế độ",       value: mode === "bulk" ? "⚡ Bulk (nhanh)" : "🐢 Từng cái (tin cũ)", inline: true },
+        { name: "Thực hiện",    value: `${interaction.user}`,                                         inline: true }
+      )
+      .setColor(0xff4444)
+      .setFooter({ text: "Hyggshi OS Bot • ClearImage" })
       .setTimestamp();
 
     if (target.id !== interaction.channel.id) {
