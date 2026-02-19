@@ -6,7 +6,8 @@ const {
   REST,
   Routes,
   SlashCommandBuilder,
-  EmbedBuilder
+  EmbedBuilder,
+  MessageFlags
 } = require("discord.js");
 
 // ================== ENV ==================
@@ -409,7 +410,7 @@ client.on("interactionCreate", async interaction => {
   // ⚡ Defer ngay lập tức để tránh timeout 3 giây của Discord
   // Với các lệnh nhanh, editReply() sẽ thay thế "đang xử lý..."
   try {
-    await interaction.deferReply({ ephemeral: false });
+    await interaction.deferReply();
   } catch (e) {
     // Nếu defer lỗi (VD: đã timeout), bỏ qua lệnh này hoàn toàn
     console.warn(`⚠️ [Defer] Không thể defer interaction "${commandName}": ${e.message}`);
@@ -423,8 +424,9 @@ client.on("interactionCreate", async interaction => {
   };
   const sendEphemeral = (payload) => {
     // Sau khi defer public, không thể đổi ephemeral — gửi followUp thay
-    if (typeof payload === "string") return interaction.followUp({ content: payload, ephemeral: true });
-    return interaction.followUp({ ...payload, ephemeral: true });
+    // Dùng MessageFlags.Ephemeral thay vì ephemeral:true (đã deprecated)
+    if (typeof payload === "string") return interaction.followUp({ content: payload, flags: MessageFlags.Ephemeral });
+    return interaction.followUp({ ...payload, flags: MessageFlags.Ephemeral });
   };
 
   try {
