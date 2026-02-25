@@ -306,7 +306,7 @@ client.once("ready", async () => {
 
   client.user.setPresence({
     status: "online",
-    activities: [{ name: "meo | /help", type: 1 }]
+    activities: [{ name: "meo | /help", type: 3 }]
   });
 
   const commands = [
@@ -862,4 +862,5 @@ client.login(TOKEN).catch(err => {
   console.error("❌ Login thất bại:", err.message);
   process.exit(1);
 });
+
 
