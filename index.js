@@ -419,9 +419,25 @@ client.once("ready", async () => {
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
   try {
-    console.log("📡 Registering slash commands...");
-    await rest.put(Routes.applicationCommands(APPLICATION_ID), { body: commands });
-    console.log("✅ Slash commands registered!");
+    const GUILD_ID = process.env.GUILD_ID;
+
+    if (GUILD_ID) {
+      // ⚡ Guild commands — đăng ký tức thì (dùng khi dev / test)
+      console.log(`📡 Registering guild slash commands (instant) for guild ${GUILD_ID}...`);
+      await rest.put(
+        Routes.applicationGuildCommands(APPLICATION_ID, GUILD_ID),
+        { body: commands }
+      );
+      console.log("✅ Guild slash commands registered instantly!");
+    } else {
+      // 🌐 Global commands — mất tới 1 giờ để hiện trên Discord
+      console.log("📡 Registering global slash commands (up to 1 hour to appear)...");
+      await rest.put(
+        Routes.applicationCommands(APPLICATION_ID),
+        { body: commands }
+      );
+      console.log("✅ Global slash commands registered!");
+    }
   } catch (err) {
     console.error("❌ Slash command error:", err);
   }
