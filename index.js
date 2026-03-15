@@ -65,21 +65,56 @@ const BLOCKED_WORDS = [
   "hate you", "die", "go die", "chết đi", "mày chết đi"
 ];
 
+const LEET_MAP = {
+  "@": "a",
+  "$": "s",
+  "4": "a",
+  "1": "i"
+};
+
+function normalizeText(input) {
+  if (!input) return "";
+  let text = input.toLowerCase();
+
+  text = text.replace(/[@$41]/g, (ch) => LEET_MAP[ch] || ch);
+  text = text.replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+  const tokens = text.split(/\s+/);
+  const out = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].length === 1) {
+      let j = i;
+      let buf = "";
+      while (j < tokens.length && tokens[j].length === 1) {
+        buf += tokens[j];
+        j++;
+      }
+      out.push(buf);
+      i = j - 1;
+    } else {
+      out.push(tokens[i]);
+    }
+  }
+
+  return out.join(" ");
+}
+
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 const BLOCKED_WORD_REGEXES = BLOCKED_WORDS.map((word) => {
-  const escaped = escapeRegex(word);
-  const boundary = "(^|[^\\p{L}\\p{N}])";
-  const pattern = `${boundary}${escaped}${boundary}`;
+  const normalized = normalizeText(word);
+  const pattern = `(^|[^\\p{L}\\p{N}])${escapeRegex(normalized)}(?=$|[^\\p{L}\\p{N}])`;
   return { word, regex: new RegExp(pattern, "iu") };
 });
 
 function safetyCheck(text) {
   if (!text) return { blocked: false, matched: null };
+
+  const normalized = normalizeText(text);
   for (const { word, regex } of BLOCKED_WORD_REGEXES) {
-    if (regex.test(text)) return { blocked: true, matched: word };
+    if (regex.test(normalized)) return { blocked: true, matched: word };
   }
   return { blocked: false, matched: null };
 }
