@@ -65,13 +65,21 @@ const BLOCKED_WORDS = [
   "hate you", "die", "go die", "chết đi", "mày chết đi"
 ];
 
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const BLOCKED_WORD_REGEXES = BLOCKED_WORDS.map((word) => {
+  const escaped = escapeRegex(word);
+  const boundary = "(^|[^\\p{L}\\p{N}])";
+  const pattern = `${boundary}${escaped}${boundary}`;
+  return { word, regex: new RegExp(pattern, "iu") };
+});
+
 function safetyCheck(text) {
   if (!text) return { blocked: false, matched: null };
-  const lower = text.toLowerCase();
-  for (const word of BLOCKED_WORDS) {
-    if (lower.includes(word.toLowerCase())) {
-      return { blocked: true, matched: word };
-    }
+  for (const { word, regex } of BLOCKED_WORD_REGEXES) {
+    if (regex.test(text)) return { blocked: true, matched: word };
   }
   return { blocked: false, matched: null };
 }
