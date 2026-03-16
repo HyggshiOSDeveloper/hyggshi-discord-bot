@@ -1,0 +1,66 @@
+﻿{
+  "version": 1,
+  "enabled": true,
+  "modLogChannel": "mod-logs",
+  "adminBypass": true,
+  "bypassRoleIds": [],
+  "ignoreChannelIds": [],
+  "ignoreChannelNames": ["bot-commands"],
+  "whitelist": ["scunthorpe"],
+  "warningMessage": "Please keep the conversation respectful and follow the rules.",
+  "timeoutMs": 600000,
+  "severityActions": {
+    "LOW": {"warn": true, "delete": false, "timeout": false},
+    "MEDIUM": {"warn": true, "delete": true, "timeout": false},
+    "HIGH": {"warn": true, "delete": true, "timeout": true}
+  },
+  "spam": {
+    "severity": "MEDIUM",
+    "repeatWindowMs": 12000,
+    "repeatCount": 3,
+    "maxMentions": 5,
+    "maxLinks": 3,
+    "maxLength": 1000
+  },
+  "rules": {
+    "inappropriate": {
+      "severity": "LOW",
+      "words": [
+        "fuck",
+        "shit",
+        "bitch",
+        "ass",
+        "damn",
+        "crap",
+        "bastard",
+        "dick",
+        "cock"
+      ]
+    },
+    "harassment": {
+      "severity": "MEDIUM",
+      "words": [
+        "idiot",
+        "moron",
+        "stupid",
+        "trash",
+        "loser",
+        "nigga",
+        "nigger",
+        "kill yourself",
+        "go die"
+      ]
+    },
+    "sexual": {
+      "severity": "MEDIUM",
+      "words": [
+        "pussy",
+        "whore",
+        "slut",
+        "porn",
+        "sex",
+        "nude"
+      ]
+    }
+  }
+}

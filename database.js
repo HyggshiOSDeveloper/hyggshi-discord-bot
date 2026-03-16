@@ -1,4 +1,4 @@
-const { Pool } = require("pg");
+﻿const { Pool } = require("pg");
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -27,7 +27,8 @@ async function initDatabase() {
     );
   `);
 
-  console.log("✅ Database ready");
+  console.log("�o. Database ready");
 }
 
 module.exports = { pool, initDatabase };
+
