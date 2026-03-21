@@ -1,4 +1,4 @@
-﻿
+
 require("dotenv").config();
 const express = require("express");
 const {
@@ -13,8 +13,6 @@ const {
 } = require("discord.js");
 
 const { pool, initDatabase } = require("./database");
-const { getFilterCommands, handleFilterCommand } = require('./safety/commands');
-const { handleMessage: handleSafetyMessage, handleCommandText } = require('./safety/handler');
 
 // ================== ENV ==================
 const TOKEN = process.env.TOKEN;
@@ -57,7 +55,48 @@ if (RENDER_URL) {
 }
 
 // ================== SAFETY FILTER LAYER ==================
-// Moved to /safety modules (config, filter engine, logger, handler).
+const BLOCKED_WORDS = [
+  "đụ", "địt", "lồn", "cặc", "dái", "đĩ", "vãi", "cứt", "đéo", "mẹ kiếp",
+  "con chó", "thằng chó", "đồ chó", "đồ điên", "mẹ mày", "bố mày", "má mày",
+  "fuck", "shit", "bitch", "damn", "crap", "bastard", "dick", "cock",
+  "pussy", "whore", "slut", "nigga", "nigger", "wtf", "stfu",
+  "tao giết mày", "tao đánh mày", "tao chém", "tao bắn", "tao đốt",
+  "i will kill", "i'll kill", "i will hurt", "gonna kill", "kms", "kill yourself",
+  "tự tử", "treo cổ", "nhảy lầu", "uống thuốc ngủ",
+  "hate you", "die", "go die", "chết đi", "mày chết đi"
+];
+
+function safetyCheck(text) {
+  if (!text) return { blocked: false, matched: null };
+  const lower = text.toLowerCase();
+  for (const word of BLOCKED_WORDS) {
+    if (lower.includes(word.toLowerCase())) {
+      return { blocked: true, matched: word };
+    }
+  }
+  return { blocked: false, matched: null };
+}
+
+async function sendSafetyWarning(target, matched, type = "message") {
+  const embed = new EmbedBuilder()
+    .setTitle("🛡️ Safety Filter — Nội dung bị chặn")
+    .setDescription(
+      `Nội dung của bạn vi phạm quy tắc cộng đồng và đã bị hệ thống chặn.\n\n` +
+      `> **Lý do:** Chứa từ ngữ không phù hợp\n` +
+      `> **Từ phát hiện:** ||\`${matched}\`||\n\n` +
+      `Vui lòng giữ thái độ lịch sự. Tiếp tục vi phạm có thể bị xử phạt.`
+    )
+    .setColor(0xff3333)
+    .setFooter({ text: "Hyggshi OS Bot • Safety Filter Layer" })
+    .setTimestamp();
+
+  if (type === "message") {
+    await target.reply({ embeds: [embed] }).catch(() => {});
+  } else {
+    await target.editReply({ embeds: [embed] }).catch(() => {});
+  }
+}
+
 // ================== CALM MODE ==================
 const CALM_MODE_DURATION = 5 * 60 * 1000;
 const CALM_TRIGGER_COUNT = 3;
@@ -374,11 +413,9 @@ client.once("ready", async () => {
     new SlashCommandBuilder()
       .setName("clearwarn")
       .setDescription("Xoá toàn bộ cảnh cáo của thành viên")
-      .addUserOption(o => o.setName("target").setDescription("User").setRequired(true)),
+      .addUserOption(o => o.setName("target").setDescription("User").setRequired(true))
 
-    ...getFilterCommands()
-
-  ].map(c => (typeof c.toJSON === "function" ? c.toJSON() : c));
+  ].map(c => c.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
@@ -435,9 +472,6 @@ client.on("interactionCreate", async interaction => {
 
   try {
 
-    if (commandName === "filter")
-      return handleFilterCommand(interaction);
-
     // ── Lệnh cũ ──
 
     if (commandName === "ping")
@@ -480,8 +514,11 @@ client.on("interactionCreate", async interaction => {
       }
 
       if (sayMsg) {
-        const result = await handleCommandText(interaction, sayMsg);
-        if (result.blocked) return;
+        const sayCheck = safetyCheck(sayMsg);
+        if (sayCheck.blocked) {
+          console.log(`🛡️ [Safety] /say bị chặn bởi ${interaction.user.tag}: "${sayMsg}"`);
+          return sendSafetyWarning(interaction, sayCheck.matched, "command");
+        }
       }
 
       if (sayImage) {
@@ -951,8 +988,12 @@ client.on("interactionCreate", async interaction => {
 client.on("messageCreate", async msg => {
   if (msg.author.bot) return;
 
-  const wasFiltered = await handleSafetyMessage(msg);
-  if (wasFiltered) {
+  const check = safetyCheck(msg.content);
+  if (check.blocked) {
+    console.log(`🛡️ [Safety] Tin nhắn bị chặn từ ${msg.author.tag}: "${msg.content}"`);
+    await sendSafetyWarning(msg, check.matched, "message");
+    try { await msg.delete(); } catch (_) {}
+
     if (msg.guild) await recordViolation(msg.guild.id, msg.channel);
     return;
   }
@@ -1036,4 +1077,3 @@ client.login(TOKEN).catch(err => {
   console.error("❌ Login thất bại:", err.message);
   process.exit(1);
 });
-
