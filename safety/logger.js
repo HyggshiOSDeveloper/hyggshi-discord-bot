@@ -1,33 +1,46 @@
-﻿const { EmbedBuilder } = require("discord.js");
+/**
+ * logger.js
+ * Handles mod-log logging.
+ */
 
-function truncate(text, max = 900) {
-  if (!text) return "";
-  if (text.length <= max) return text;
-  return text.slice(0, max - 3) + "...";
-}
+const { EmbedBuilder } = require("discord.js");
+const { getConfig } = require("./config");
 
-async function logViolation({ client, message, violation, config }) {
+/**
+ * Logs a moderation action to the mod-log channel.
+ * @param {import('discord.js').Message} message The original message.
+ * @param {string} reason The reason for moderation.
+ * @param {string} detected The content that triggered the filter.
+ */
+async function logToModLog(message, reason, detected) {
   if (!message.guild) return;
 
-  const channelName = config.modLogChannel || "mod-logs";
-  const channel = message.guild.channels.cache.find(ch => ch.name === channelName || ch.id === channelName);
-  if (!channel) return;
+  const config = getConfig();
+  const channelNameOrId = config.modLogChannel || "mod-logs";
+  
+  const logChannel = message.guild.channels.cache.find(
+    ch => ch.name === channelNameOrId || ch.id === channelNameOrId
+  );
+
+  if (!logChannel) return;
 
   const embed = new EmbedBuilder()
-    .setTitle("Safety Filter — Log")
-    .setColor(0xff4444)
+    .setTitle("Moderation Action")
+    .setColor(0xFF0000)
     .addFields(
-      { name: "User", value: `${message.author}`, inline: true },
-      { name: "User ID", value: message.author.id, inline: true },
+      { name: "User", value: `${message.author.tag} (${message.author.id})`, inline: true },
       { name: "Channel", value: `<#${message.channel.id}>`, inline: true },
-      { name: "Severity", value: violation.severity || "LOW", inline: true },
-      { name: "Detected Keyword", value: violation.detectedWord ? String(violation.detectedWord) : "n/a", inline: true },
-      { name: "Reason", value: violation.reason || "Policy violation", inline: true },
-      { name: "Message Content", value: truncate(message.content || "(empty)") }
+      { name: "Reason", value: reason, inline: true },
+      { name: "Detected Content", value: `\`${detected}\``, inline: true },
+      { name: "Original Message", value: message.content.substring(0, 1024) || "(empty)" }
     )
-    .setTimestamp(new Date());
+    .setTimestamp();
 
-  await channel.send({ embeds: [embed] }).catch(() => {});
+  try {
+    await logChannel.send({ embeds: [embed] });
+  } catch (error) {
+    console.error("Failed to send log to mod-log channel:", error.message);
+  }
 }
 
-module.exports = { logViolation };
+module.exports = { logToModLog };

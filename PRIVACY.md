@@ -28,7 +28,7 @@ You may contact the developer if you have any questions or concerns about the Bo
 
 ## 5️ Contact Information
 
-Developer: Nguyen Minh Phuc
+Developer: Nguyen Minh Phuc  
 
 Discord: Hyggshi
 

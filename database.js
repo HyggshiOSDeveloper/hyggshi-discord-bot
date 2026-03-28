@@ -27,8 +27,7 @@ async function initDatabase() {
     );
   `);
 
-  console.log("�o. Database ready");
+  console.log("Database ready");
 }
 
 module.exports = { pool, initDatabase };
-
