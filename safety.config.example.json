@@ -7,6 +7,8 @@
   "ignoreChannelIds": [],
   "ignoreChannelNames": ["bot-commands"],
   "whitelist": ["scunthorpe"],
+  "bannedWords": [],
+  "defaultBannedWordSeverity": "MEDIUM",
   "warningMessage": "Please keep the conversation respectful and follow the rules.",
   "timeoutMs": 600000,
   "severityActions": {

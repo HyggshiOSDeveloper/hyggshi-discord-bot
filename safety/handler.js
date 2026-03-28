@@ -23,22 +23,48 @@ function hasBypass(config, member) {
 function buildWarningEmbed(violation, config) {
   return new EmbedBuilder()
     .setTitle("Safety Filter — Content Blocked")
-    .setDescription("Your message violated community guidelines and has been removed.")
+    .setDescription("Your message contained banned content and was removed by moderation.")
     .addFields(
       { name: "Reason", value: violation.reason || "Policy violation" },
-      { name: "Detected word", value: violation.detectedWord ? `||${violation.detectedWord}||` : "n/a" },
+      { name: "Detected word", value: violation.detectedWord ? `\`${violation.detectedWord}\`` : "n/a" },
       { name: "Warning message", value: config.warningMessage || "Please keep the conversation respectful." }
     )
     .setColor(0xff3333)
     .setTimestamp();
 }
 
+async function safeDeleteMessage(message) {
+  try {
+    await message.delete();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function sendWarning(message, violation, config) {
+  const embed = buildWarningEmbed(violation, config);
+  await message.channel.send({ content: `${message.author}`, embeds: [embed] }).catch(() => {});
+}
+
 async function applyActions(message, violation, config) {
   const severity = (violation.severity || "LOW").toUpperCase();
   const actions = config.severityActions[severity] || config.severityActions.LOW;
 
+  if (violation.type === "banned_word") {
+    await safeDeleteMessage(message);
+    await sendWarning(message, violation, config);
+
+    if (actions.timeout) {
+      const duration = config.timeoutMs || 10 * 60 * 1000;
+      try { await message.member.timeout(duration, "Safety Filter violation"); } catch (_) {}
+    }
+
+    return;
+  }
+
   if (actions.delete) {
-    try { await message.delete(); } catch (_) {}
+    await safeDeleteMessage(message);
   }
 
   if (actions.timeout) {
@@ -47,8 +73,7 @@ async function applyActions(message, violation, config) {
   }
 
   if (actions.warn) {
-    const embed = buildWarningEmbed(violation, config);
-    await message.channel.send({ content: `${message.author}`, embeds: [embed] }).catch(() => {});
+    await sendWarning(message, violation, config);
   }
 }
 

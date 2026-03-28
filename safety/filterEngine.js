@@ -2,7 +2,7 @@
 
 const spamState = new Map();
 let cacheVersion = null;
-let cachedEntries = [];
+let cachedBannedWords = [];
 let cachedWhitelist = new Set();
 
 const LEET_MAP = {
@@ -54,25 +54,46 @@ function buildWordRegex(word) {
 }
 
 function rebuildCache(config) {
-  cachedEntries = [];
+  cachedBannedWords = [];
   cachedWhitelist = new Set((config.whitelist || []).map(w => normalizeText(w)));
 
-  for (const [category, rule] of Object.entries(config.rules || {})) {
-    const severity = rule.severity || "LOW";
-    const words = Array.isArray(rule.words) ? rule.words : [];
+  const bannedWords = [];
 
+  for (const [category, rule] of Object.entries(config.rules || {})) {
+    const severity = rule?.severity || "LOW";
+    const words = Array.isArray(rule?.words) ? rule.words : [];
     for (const word of words) {
-      const normalized = normalizeText(word);
-      const regex = buildWordRegex(word);
-      if (!normalized && !regex) continue;
-      cachedEntries.push({
-        category,
-        severity,
+      bannedWords.push({ word, category, severity });
+    }
+  }
+
+  if (Array.isArray(config.bannedWords)) {
+    for (const word of config.bannedWords) {
+      bannedWords.push({
         word,
-        normalized,
-        regex
+        category: "custom",
+        severity: config.defaultBannedWordSeverity || "MEDIUM"
       });
     }
+  }
+
+  const dedup = new Set();
+  for (const item of bannedWords) {
+    if (!item?.word) continue;
+
+    const normalized = normalizeText(item.word);
+    const regex = buildWordRegex(item.word);
+    if (!normalized && !regex) continue;
+    if (normalized && dedup.has(normalized)) continue;
+
+    if (normalized) dedup.add(normalized);
+    cachedBannedWords.push({
+      category: item.category,
+      severity: item.severity,
+      word: item.word,
+      normalized,
+      regex
+    });
   }
 
   cacheVersion = config.version;
@@ -116,21 +137,19 @@ function detectSpam(content, authorId, config) {
   return null;
 }
 
-function matchRules(content, config) {
+function matchBannedWords(content) {
   const lower = content.toLowerCase();
   const normalized = normalizeText(content);
 
-  for (const entry of cachedEntries) {
+  for (const entry of cachedBannedWords) {
     if (!entry) continue;
+    if (entry.normalized && cachedWhitelist.has(entry.normalized)) continue;
 
     if (entry.regex && entry.regex.test(lower)) {
-      const whitelistKey = entry.normalized;
-      if (cachedWhitelist.has(whitelistKey)) continue;
       return entry;
     }
 
     if (entry.normalized && normalized.includes(entry.normalized)) {
-      if (cachedWhitelist.has(entry.normalized)) continue;
       return entry;
     }
   }
@@ -150,6 +169,7 @@ function analyzeText(content, authorId, configOverride) {
   if (spamHit) {
     return {
       blocked: true,
+      type: "spam",
       category: "spam",
       reason: spamHit.reason,
       detectedWord: spamHit.detected,
@@ -157,7 +177,7 @@ function analyzeText(content, authorId, configOverride) {
     };
   }
 
-  const matched = matchRules(content, config);
+  const matched = matchBannedWords(content);
   if (!matched) return { blocked: false };
 
   const reasonMap = {
@@ -168,6 +188,7 @@ function analyzeText(content, authorId, configOverride) {
 
   return {
     blocked: true,
+    type: "banned_word",
     category: matched.category,
     reason: reasonMap[matched.category] || "Policy violation",
     detectedWord: matched.word,

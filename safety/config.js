@@ -27,6 +27,8 @@ function applyDefaults(config) {
     ignoreChannelIds: [],
     ignoreChannelNames: [],
     whitelist: [],
+    bannedWords: [],
+    defaultBannedWordSeverity: "MEDIUM",
     warningMessage: "Please keep the conversation respectful and follow the rules.",
     timeoutMs: 10 * 60 * 1000,
     severityActions: {
