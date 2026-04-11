@@ -230,7 +230,7 @@ client.once("ready", async () => {
 
   client.user.setPresence({
     status: "online",
-    activities: [{ name: "meo | /help", type: 3 }]
+    activities: [{ name: ":) | /help", type: 3 }]
   });
 
   // ── Auto Unban (tạm thời) ──
