@@ -1,4 +1,3 @@
-﻿
 require("dotenv").config();
 const express = require("express");
 const {
@@ -54,6 +53,25 @@ if (RENDER_URL) {
   }, 4 * 60 * 1000);
 } else {
   console.warn("⚠️ Chưa set RENDER_URL, bot có thể bị sleep!");
+}
+
+// ================== DB RETRY ==================
+async function initDatabaseWithRetry(retries = 10, delayMs = 3000) {
+  for (let i = 1; i <= retries; i++) {
+    try {
+      await initDatabase();
+      console.log("✅ Database connected!");
+      return;
+    } catch (err) {
+      console.error(`❌ DB attempt ${i}/${retries} failed: ${err.message}`);
+      if (i < retries) {
+        console.log(`⏳ Retrying in ${delayMs / 1000}s...`);
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+    }
+  }
+  console.error("❌ Could not connect to database after all retries. Exiting.");
+  process.exit(1);
 }
 
 // ================== SAFETY FILTER LAYER ==================
@@ -223,10 +241,11 @@ const client = new Client({
 });
 
 // ================== READY ==================
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   console.log(`🤖 Bot ready: ${client.user.tag}`);
 
-  await initDatabase();
+  // ── DB connect with retry ──
+  await initDatabaseWithRetry();
 
   client.user.setPresence({
     status: "online",
@@ -386,7 +405,6 @@ client.once("ready", async () => {
     const GUILD_ID = process.env.GUILD_ID;
 
     if (GUILD_ID) {
-      // ⚡ Guild commands — đăng ký tức thì (dùng khi dev / test)
       console.log(`📡 Registering guild slash commands (instant) for guild ${GUILD_ID}...`);
       await rest.put(
         Routes.applicationGuildCommands(APPLICATION_ID, GUILD_ID),
@@ -394,7 +412,6 @@ client.once("ready", async () => {
       );
       console.log("✅ Guild slash commands registered instantly!");
     } else {
-      // 🌐 Global commands — mất tới 1 giờ để hiện trên Discord
       console.log("📡 Registering global slash commands (up to 1 hour to appear)...");
       await rest.put(
         Routes.applicationCommands(APPLICATION_ID),
@@ -986,7 +1003,7 @@ client.on("guildMemberAdd", async member => {
         await m.ban({ reason: "Anti-Raid Protection" });
     }
     joinTracker = [];
-    return; // Không gửi welcome khi đang raid
+    return;
   }
 
   // ── Welcome ──
@@ -1028,7 +1045,7 @@ process.on("uncaughtException", err => {
     return;
   }
   console.error("❌ Uncaught Exception nghiêm trọng:", err);
-  process.exit(1);
+  // Do NOT exit — let the retry logic in initDatabaseWithRetry handle DB failures
 });
 
 // ================== LOGIN ==================
@@ -1036,4 +1053,3 @@ client.login(TOKEN).catch(err => {
   console.error("❌ Login thất bại:", err.message);
   process.exit(1);
 });
-
