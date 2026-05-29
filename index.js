@@ -782,20 +782,21 @@ client.on("interactionCreate", async interaction => {
       // ── DM thông báo cho user trước khi ban ──
       const dmEmbed = new EmbedBuilder()
         .setTitle("⛔ Bạn đã bị cấm khỏi server")
-        .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
         .setDescription(
           `Bạn đã bị ban ra khỏi **${interaction.guild.name}**.\n` +
           `Nếu bạn cho rằng đây là nhầm lẫn, hãy liên hệ quản trị viên.`
         )
         .addFields(
           { name: "🏠 Server",     value: interaction.guild.name,                                              inline: true },
-          { name: "👮 Người ban",  value: `${interaction.user.tag}`,                                           inline: true },
+          { name: "👮 Người ban",  value: `${interaction.user.username}`,                                           inline: true },
           { name: "📋 Lý do",      value: reason,                                                              inline: false },
           { name: "⏳ Thời hạn",   value: expiresAt ? `<t:${Math.floor(expiresAt/1000)}:F> (<t:${Math.floor(expiresAt/1000)}:R>)` : "🔴 Vĩnh viễn", inline: false }
         )
         .setColor(0xff0000)
         .setFooter({ text: "Hyggshi OS Bot • Ban Notification" })
         .setTimestamp();
+      const _banIcon = interaction.guild.iconURL({ forceStatic: false });
+      if (_banIcon) dmEmbed.setThumbnail(_banIcon);
 
       let dmSent = true;
       try {
@@ -812,7 +813,7 @@ client.on("interactionCreate", async interaction => {
       const banEmbed = new EmbedBuilder()
         .setTitle("⛔ Ban thành công")
         .addFields(
-          { name: "Thành viên", value: `${target.tag} (${target.id})`,                                        inline: false },
+          { name: "Thành viên", value: `${target.username} (${target.id})`,                                        inline: false },
           { name: "📋 Lý do",   value: reason,                                                                 inline: false },
           { name: "⏳ Thời hạn", value: expiresAt ? `<t:${Math.floor(expiresAt/1000)}:R>` : "🔴 Vĩnh viễn",  inline: true  },
           { name: "📩 DM",      value: dmSent ? "✅ Đã gửi thông báo" : "❌ Không gửi được (user tắt DM)",    inline: true  },
@@ -834,7 +835,7 @@ client.on("interactionCreate", async interaction => {
       await interaction.guild.members.unban(target.id).catch(() => null);
       getBanMap(interaction.guild.id).delete(target.id);
 
-      return send(`✅ Đã unban **${target.tag}**.`);
+      return send(`✅ Đã unban **${target.username}**.`);
     }
 
     if (commandName === "banlist") {
@@ -878,14 +879,13 @@ client.on("interactionCreate", async interaction => {
       // ── DM thông báo warn ──
       const warnDmEmbed = new EmbedBuilder()
         .setTitle("⚠️ Bạn đã bị cảnh cáo")
-        .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
         .setDescription(
           `Bạn đã nhận được **cảnh cáo** tại **${interaction.guild.name}**.\n` +
           `Vui lòng chú ý tuân thủ nội quy server.`
         )
         .addFields(
           { name: "🏠 Server",    value: interaction.guild.name,         inline: true  },
-          { name: "👮 Mod",       value: interaction.user.tag,            inline: true  },
+          { name: "👮 Mod",       value: interaction.user.username,            inline: true  },
           { name: "📋 Lý do",     value: reason,                          inline: false },
           { name: "🔢 Tổng warn", value: `${count}/3`,                    inline: true  },
           { name: "⚠️ Lưu ý",    value: count >= 2
@@ -895,6 +895,8 @@ client.on("interactionCreate", async interaction => {
         .setColor(count >= 2 ? 0xff4500 : 0xffa500)
         .setFooter({ text: "Hyggshi OS Bot • Warn Notification" })
         .setTimestamp();
+      const _warnIcon = interaction.guild.iconURL({ forceStatic: false });
+      if (_warnIcon) warnDmEmbed.setThumbnail(_warnIcon);
 
       try {
         await target.send({ embeds: [warnDmEmbed] });
@@ -907,7 +909,6 @@ client.on("interactionCreate", async interaction => {
           // ── DM thông báo auto-ban ──
           const autoBanDmEmbed = new EmbedBuilder()
             .setTitle("⛔ Bạn đã bị tự động ban")
-            .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
             .setDescription(
               `Do đã tích lũy đủ **3 cảnh cáo**, bạn đã bị ban tự động khỏi **${interaction.guild.name}**.`
             )
@@ -919,6 +920,7 @@ client.on("interactionCreate", async interaction => {
             .setColor(0xff0000)
             .setFooter({ text: "Hyggshi OS Bot • Auto Ban Notification" })
             .setTimestamp();
+          if (_warnIcon) autoBanDmEmbed.setThumbnail(_warnIcon);
 
           try {
             await target.send({ embeds: [autoBanDmEmbed] });
@@ -935,12 +937,12 @@ client.on("interactionCreate", async interaction => {
       const warnEmbed = new EmbedBuilder()
         .setTitle("⚠️ Cảnh cáo")
         .addFields(
-          { name: "Thành viên", value: `${target.tag}`, inline: true },
+          { name: "Thành viên", value: target.username, inline: true },
           { name: "Lý do",      value: reason,           inline: true },
           { name: "Tổng warn",  value: `${count}`,       inline: true }
         )
         .setColor(count >= 3 ? 0xff0000 : 0xffa500)
-        .setDescription(count >= 3 ? "⛔ Đã đủ 3 warn — **Tự động ban**!" : null)
+        .setDescription(count >= 3 ? "⛔ Đã đủ 3 warn — **Tự động ban**!" : "Thành viên đã bị cảnh cáo.")
         .setFooter({ text: "Hyggshi OS Bot • Warn" })
         .setTimestamp();
 
@@ -951,7 +953,7 @@ client.on("interactionCreate", async interaction => {
       const target = interaction.options.getUser("target");
       const list   = getWarnList(interaction.guild.id, target.id);
 
-      if (!list.length) return send(`✅ **${target.tag}** chưa có warn nào.`);
+      if (!list.length) return send(`✅ **${target.username}** chưa có warn nào.`);
 
       let desc = "";
       for (const w of [...list].reverse()) {
@@ -959,7 +961,7 @@ client.on("interactionCreate", async interaction => {
       }
 
       const embed = new EmbedBuilder()
-        .setTitle(`📋 Danh sách warn — ${target.tag}`)
+        .setTitle(`📋 Danh sách warn — ${target.username}`)
         .setDescription(desc)
         .setColor(0xffa500)
         .setFooter({ text: `Tổng: ${list.length} warn • Hyggshi OS Bot` })
@@ -975,7 +977,7 @@ client.on("interactionCreate", async interaction => {
       const target = interaction.options.getUser("target");
       getWarnMap(interaction.guild.id).delete(target.id);
 
-      return send(`✅ Đã xoá toàn bộ warn của **${target.tag}**.`);
+      return send(`✅ Đã xoá toàn bộ warn của **${target.username}**.`);
     }
 
   } catch (err) {
