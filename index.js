@@ -554,7 +554,7 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (commandName === "clear") {
-      if (!interaction.member.permissions.has("ManageMessages")) {
+      if (!interaction.memberPermissions.has("ManageMessages")) {
         return sendEphemeral("🚫 Bạn không có quyền **Quản lý tin nhắn** để dùng lệnh này!");
       }
 
@@ -643,7 +643,7 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (commandName === "clearimage") {
-      if (!interaction.member.permissions.has("ManageMessages")) {
+      if (!interaction.memberPermissions.has("ManageMessages")) {
         return sendEphemeral("🚫 Bạn không có quyền **Quản lý tin nhắn** để dùng lệnh này!");
       }
 
@@ -753,7 +753,7 @@ client.on("interactionCreate", async interaction => {
     // ── Moderation ──
 
     if (commandName === "ban") {
-      if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers))
+      if (!interaction.memberPermissions.has(PermissionsBitField.Flags.BanMembers))
         return sendEphemeral("🚫 Bạn không có quyền **Ban thành viên**!");
 
       const target   = interaction.options.getUser("target");
@@ -826,7 +826,7 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (commandName === "unban") {
-      if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers))
+      if (!interaction.memberPermissions.has(PermissionsBitField.Flags.BanMembers))
         return sendEphemeral("🚫 Bạn không có quyền **Ban thành viên**!");
 
       const target = interaction.options.getUser("target");
@@ -838,7 +838,7 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (commandName === "banlist") {
-      if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers))
+      if (!interaction.memberPermissions.has(PermissionsBitField.Flags.BanMembers))
         return sendEphemeral("🚫 Bạn không có quyền xem danh sách ban!");
 
       const banMap = getBanMap(interaction.guild.id);
@@ -864,7 +864,7 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (commandName === "warn") {
-      if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers))
+      if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ModerateMembers))
         return sendEphemeral("🚫 Bạn không có quyền **Cảnh cáo thành viên**!");
 
       const target = interaction.options.getUser("target");
@@ -969,7 +969,7 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (commandName === "clearwarn") {
-      if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
+      if (!interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator))
         return sendEphemeral("🚫 Chỉ **Admin** mới có thể xoá warn!");
 
       const target = interaction.options.getUser("target");
