@@ -11,7 +11,6 @@ const {
   MessageFlags
 } = require("discord.js");
 
-const { pool, initDatabase } = require("./database");
 const { getFilterCommands, handleFilterCommand } = require('./safety/commands');
 const { handleMessage: handleSafetyMessage, handleCommandText } = require('./safety/handler');
 
@@ -19,6 +18,31 @@ const { handleMessage: handleSafetyMessage, handleCommandText } = require('./saf
 const TOKEN = process.env.TOKEN;
 const APPLICATION_ID = process.env.APPLICATION_ID || process.env.CLIENT_ID;
 const PORT = process.env.PORT || 10000;
+
+// ================== IN-MEMORY STORE ==================
+// Thay thế database — data sẽ reset khi bot restart
+
+// bansStore: Map<guildId, Map<userId, { reason, expiresAt }>>
+const bansStore = new Map();
+
+function getBanMap(guildId) {
+  if (!bansStore.has(guildId)) bansStore.set(guildId, new Map());
+  return bansStore.get(guildId);
+}
+
+// warnsStore: Map<guildId, Map<userId, Array<{ moderatorId, reason, timestamp }>>>
+const warnsStore = new Map();
+
+function getWarnMap(guildId) {
+  if (!warnsStore.has(guildId)) warnsStore.set(guildId, new Map());
+  return warnsStore.get(guildId);
+}
+
+function getWarnList(guildId, userId) {
+  const map = getWarnMap(guildId);
+  if (!map.has(userId)) map.set(userId, []);
+  return map.get(userId);
+}
 
 // ================== EXPRESS ==================
 const app = express();
@@ -55,27 +79,6 @@ if (RENDER_URL) {
   console.warn("⚠️ Chưa set RENDER_URL, bot có thể bị sleep!");
 }
 
-// ================== DB RETRY ==================
-async function initDatabaseWithRetry(retries = 10, delayMs = 3000) {
-  for (let i = 1; i <= retries; i++) {
-    try {
-      await initDatabase();
-      console.log("✅ Database connected!");
-      return;
-    } catch (err) {
-      console.error(`❌ DB attempt ${i}/${retries} failed: ${err.message}`);
-      if (i < retries) {
-        console.log(`⏳ Retrying in ${delayMs / 1000}s...`);
-        await new Promise(r => setTimeout(r, delayMs));
-      }
-    }
-  }
-  console.error("❌ Could not connect to database after all retries. Exiting.");
-  process.exit(1);
-}
-
-// ================== SAFETY FILTER LAYER ==================
-// Moved to /safety modules (config, filter engine, logger, handler).
 // ================== CALM MODE ==================
 const CALM_MODE_DURATION = 5 * 60 * 1000;
 const CALM_TRIGGER_COUNT = 3;
@@ -244,49 +247,39 @@ const client = new Client({
 client.once("clientReady", async () => {
   console.log(`🤖 Bot ready: ${client.user.tag}`);
 
-  // ── DB connect with retry ──
-  await initDatabaseWithRetry();
-
   client.user.setPresence({
     status: "online",
     activities: [{ name: ":) | /help", type: 3 }]
   });
 
-  // ── Auto Unban (tạm thời) ──
+  // ── Auto Unban (in-memory) ──
   setInterval(async () => {
     const now = Date.now();
-    try {
-      const { rows } = await pool.query(
-        `SELECT * FROM bans WHERE expiresAt IS NOT NULL AND expiresAt <= $1`,
-        [now]
-      );
-      for (const row of rows) {
-        const guild = client.guilds.cache.get(row.guildid);
-        if (!guild) continue;
-        try { await guild.members.unban(row.userid); } catch (_) {}
-        await pool.query(
-          `DELETE FROM bans WHERE userid = $1 AND guildid = $2`,
-          [row.userid, row.guildid]
-        );
+    for (const [guildId, banMap] of bansStore) {
+      const guild = client.guilds.cache.get(guildId);
+      if (!guild) continue;
+      for (const [userId, data] of banMap) {
+        if (data.expiresAt && data.expiresAt <= now) {
+          try { await guild.members.unban(userId); } catch (_) {}
+          banMap.delete(userId);
+          console.log(`[AutoUnban] Đã unban ${userId} tại guild ${guildId}`);
+        }
       }
-    } catch (e) {
-      console.error("[AutoUnban] Lỗi:", e.message);
     }
   }, 60000);
 
   // ── Auto Reset Warn (30 ngày) ──
-  setInterval(async () => {
-    const THIRTY = 30 * 24 * 60 * 60 * 1000;
-    const limit  = Date.now() - THIRTY;
-    try {
-      await pool.query(`DELETE FROM warns WHERE timestamp <= $1`, [limit]);
-    } catch (e) {
-      console.error("[AutoResetWarn] Lỗi:", e.message);
+  setInterval(() => {
+    const limit = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    for (const [, warnMap] of warnsStore) {
+      for (const [userId, list] of warnMap) {
+        const filtered = list.filter(w => w.timestamp > limit);
+        warnMap.set(userId, filtered);
+      }
     }
   }, 3600000);
 
   const commands = [
-    // ── Lệnh cũ ──
     new SlashCommandBuilder().setName("ping").setDescription("Kiểm tra độ trễ phản hồi"),
     new SlashCommandBuilder().setName("status").setDescription("Trạng thái bot"),
     new SlashCommandBuilder().setName("info").setDescription("Giới thiệu bot"),
@@ -361,35 +354,28 @@ client.once("clientReady", async () => {
           .setDescription("Xoá cả ảnh trong tin nhắn cũ hơn 14 ngày? (chậm hơn)")
           .setRequired(false)
       ),
-
-    // ── Lệnh mới (moderation) ──
     new SlashCommandBuilder()
       .setName("ban")
       .setDescription("Ban thành viên")
       .addUserOption(o => o.setName("target").setDescription("User").setRequired(true))
       .addStringOption(o => o.setName("reason").setDescription("Lý do"))
       .addStringOption(o => o.setName("duration").setDescription("10m | 1h | 1d")),
-
     new SlashCommandBuilder()
       .setName("unban")
       .setDescription("Gỡ ban")
       .addUserOption(o => o.setName("target").setDescription("User").setRequired(true)),
-
     new SlashCommandBuilder()
       .setName("banlist")
       .setDescription("Xem danh sách ban"),
-
     new SlashCommandBuilder()
       .setName("warn")
       .setDescription("Cảnh cáo thành viên")
       .addUserOption(o => o.setName("target").setDescription("User").setRequired(true))
       .addStringOption(o => o.setName("reason").setDescription("Lý do").setRequired(true)),
-
     new SlashCommandBuilder()
       .setName("warnlist")
       .setDescription("Xem cảnh cáo của thành viên")
       .addUserOption(o => o.setName("target").setDescription("User").setRequired(true)),
-
     new SlashCommandBuilder()
       .setName("clearwarn")
       .setDescription("Xoá toàn bộ cảnh cáo của thành viên")
@@ -454,8 +440,6 @@ client.on("interactionCreate", async interaction => {
 
     if (commandName === "filter")
       return handleFilterCommand(interaction);
-
-    // ── Lệnh cũ ──
 
     if (commandName === "ping")
       return send(`🏓 Pong! 🏓 Ping: ${Date.now() - interaction.createdTimestamp} ms`);
@@ -766,7 +750,7 @@ client.on("interactionCreate", async interaction => {
       return send({ embeds: [resultEmbed] });
     }
 
-    // ── Lệnh mới (moderation) ──
+    // ── Moderation ──
 
     if (commandName === "ban") {
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers))
@@ -801,16 +785,14 @@ client.on("interactionCreate", async interaction => {
 
       await member.ban({ reason });
 
-      await pool.query(
-        `INSERT INTO bans (userId, guildId, reason, expiresAt) VALUES ($1, $2, $3, $4)`,
-        [target.id, interaction.guild.id, reason, expiresAt]
-      );
+      // Lưu vào in-memory store
+      getBanMap(interaction.guild.id).set(target.id, { reason, expiresAt });
 
       const banEmbed = new EmbedBuilder()
         .setTitle("⛔ Ban thành công")
         .addFields(
-          { name: "Thành viên", value: `${target.tag}`,                                           inline: true },
-          { name: "Lý do",      value: reason,                                                     inline: true },
+          { name: "Thành viên", value: `${target.tag}`,                                                 inline: true },
+          { name: "Lý do",      value: reason,                                                           inline: true },
           { name: "Thời hạn",   value: expiresAt ? `<t:${Math.floor(expiresAt/1000)}:R>` : "Vĩnh viễn", inline: true }
         )
         .setColor(0xff0000)
@@ -827,11 +809,7 @@ client.on("interactionCreate", async interaction => {
       const target = interaction.options.getUser("target");
 
       await interaction.guild.members.unban(target.id).catch(() => null);
-
-      await pool.query(
-        `DELETE FROM bans WHERE userId=$1 AND guildId=$2`,
-        [target.id, interaction.guild.id]
-      );
+      getBanMap(interaction.guild.id).delete(target.id);
 
       return send(`✅ Đã unban **${target.tag}**.`);
     }
@@ -840,19 +818,16 @@ client.on("interactionCreate", async interaction => {
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers))
         return sendEphemeral("🚫 Bạn không có quyền xem danh sách ban!");
 
-      const { rows } = await pool.query(
-        `SELECT * FROM bans WHERE guildId=$1`,
-        [interaction.guild.id]
-      );
+      const banMap = getBanMap(interaction.guild.id);
 
-      if (!rows.length) return send("✅ Không có ai đang bị ban.");
+      if (banMap.size === 0) return send("✅ Không có ai đang bị ban.");
 
       let desc = "";
-      for (const row of rows) {
-        const type = row.expiresat
-          ? `<t:${Math.floor(row.expiresat/1000)}:R>`
+      for (const [userId, data] of banMap) {
+        const type = data.expiresAt
+          ? `<t:${Math.floor(data.expiresAt/1000)}:R>`
           : "Vĩnh viễn";
-        desc += `<@${row.userid}> — ${type}\n`;
+        desc += `<@${userId}> — ${type}\n`;
       }
 
       const embed = new EmbedBuilder()
@@ -872,17 +847,10 @@ client.on("interactionCreate", async interaction => {
       const target = interaction.options.getUser("target");
       const reason = interaction.options.getString("reason");
 
-      await pool.query(
-        `INSERT INTO warns (userId, guildId, moderatorId, reason, timestamp) VALUES ($1, $2, $3, $4, $5)`,
-        [target.id, interaction.guild.id, interaction.user.id, reason, Date.now()]
-      );
+      const list = getWarnList(interaction.guild.id, target.id);
+      list.push({ moderatorId: interaction.user.id, reason, timestamp: Date.now() });
 
-      const { rows } = await pool.query(
-        `SELECT * FROM warns WHERE userId=$1 AND guildId=$2`,
-        [target.id, interaction.guild.id]
-      );
-
-      const count = rows.length;
+      const count = list.length;
 
       try {
         await target.send(`⚠️ Bạn bị warn tại **${interaction.guild.name}**\nLý do: ${reason}\nTổng warn: ${count}`);
@@ -893,19 +861,19 @@ client.on("interactionCreate", async interaction => {
         const member = await interaction.guild.members.fetch(target.id).catch(() => null);
         if (member?.bannable) {
           await member.ban({ reason: "Tự động ban: đủ 3 cảnh cáo" });
-          await pool.query(
-            `INSERT INTO bans (userId, guildId, reason, expiresAt) VALUES ($1, $2, $3, $4)`,
-            [target.id, interaction.guild.id, "Tự động ban: đủ 3 cảnh cáo", null]
-          );
+          getBanMap(interaction.guild.id).set(target.id, {
+            reason: "Tự động ban: đủ 3 cảnh cáo",
+            expiresAt: null
+          });
         }
       }
 
       const warnEmbed = new EmbedBuilder()
         .setTitle("⚠️ Cảnh cáo")
         .addFields(
-          { name: "Thành viên", value: `${target.tag}`,   inline: true },
-          { name: "Lý do",      value: reason,             inline: true },
-          { name: "Tổng warn",  value: `${count}`,         inline: true }
+          { name: "Thành viên", value: `${target.tag}`, inline: true },
+          { name: "Lý do",      value: reason,           inline: true },
+          { name: "Tổng warn",  value: `${count}`,       inline: true }
         )
         .setColor(count >= 3 ? 0xff0000 : 0xffa500)
         .setDescription(count >= 3 ? "⛔ Đã đủ 3 warn — **Tự động ban**!" : null)
@@ -917,24 +885,20 @@ client.on("interactionCreate", async interaction => {
 
     if (commandName === "warnlist") {
       const target = interaction.options.getUser("target");
+      const list   = getWarnList(interaction.guild.id, target.id);
 
-      const { rows } = await pool.query(
-        `SELECT * FROM warns WHERE userId=$1 AND guildId=$2 ORDER BY timestamp DESC`,
-        [target.id, interaction.guild.id]
-      );
-
-      if (!rows.length) return send(`✅ **${target.tag}** chưa có warn nào.`);
+      if (!list.length) return send(`✅ **${target.tag}** chưa có warn nào.`);
 
       let desc = "";
-      for (const row of rows) {
-        desc += `• ${row.reason} — <t:${Math.floor(row.timestamp/1000)}:f>\n`;
+      for (const w of [...list].reverse()) {
+        desc += `• ${w.reason} — <t:${Math.floor(w.timestamp/1000)}:f>\n`;
       }
 
       const embed = new EmbedBuilder()
         .setTitle(`📋 Danh sách warn — ${target.tag}`)
         .setDescription(desc)
         .setColor(0xffa500)
-        .setFooter({ text: `Tổng: ${rows.length} warn • Hyggshi OS Bot` })
+        .setFooter({ text: `Tổng: ${list.length} warn • Hyggshi OS Bot` })
         .setTimestamp();
 
       return send({ embeds: [embed] });
@@ -945,11 +909,7 @@ client.on("interactionCreate", async interaction => {
         return sendEphemeral("🚫 Chỉ **Admin** mới có thể xoá warn!");
 
       const target = interaction.options.getUser("target");
-
-      await pool.query(
-        `DELETE FROM warns WHERE userId=$1 AND guildId=$2`,
-        [target.id, interaction.guild.id]
-      );
+      getWarnMap(interaction.guild.id).delete(target.id);
 
       return send(`✅ Đã xoá toàn bộ warn của **${target.tag}**.`);
     }
@@ -1045,7 +1005,6 @@ process.on("uncaughtException", err => {
     return;
   }
   console.error("❌ Uncaught Exception nghiêm trọng:", err);
-  // Do NOT exit — let the retry logic in initDatabaseWithRetry handle DB failures
 });
 
 // ================== LOGIN ==================
