@@ -1,0 +1,6 @@
+[[services]]
+  internal_port = 3000  # đổi theo port thật của bạn
+  protocol = "tcp"
+
+[[vm]]
+  size = "shared-cpu-1x"
